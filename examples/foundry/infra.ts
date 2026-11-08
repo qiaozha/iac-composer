@@ -1,16 +1,9 @@
-import {
-  createBicepParameterFile,
-  renderBicepFiles,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
-import { RoleAssignment } from "@azure/provisioning-authorization";
-import {
-  Account,
-  Deployment as ModelDeployment,
-  Project,
-} from "@azure/provisioning-cognitiveservices";
-import { fn, Stack } from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
+import { createBicepParameterFile, renderBicepFiles, renderBicepParameterFile } from "./runtime/provisioning.js";
+import { RoleAssignment } from "./runtime/provisioning.js";
+import { Account, Deployment as ModelDeployment, Project } from "@azure/provisioning-cognitiveservices";
+import { Stack } from "@azure/provisioning-core";
+import { fn } from "./runtime/provisioning.js";
+import { serialize } from "./runtime/provisioning.js";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
@@ -101,12 +94,12 @@ stack.outputs.add("AZURE_FOUNDRY_ROLE_ASSIGNMENT_ID", "string", deployerRoleAssi
 stack.outputs.add("AZURE_FOUNDRY_PRINCIPAL_ID", "string", deploymentPrincipalId);
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Foundry provisioning produced no Bicep entry file.");
 }
 
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_AI_LOCATION"),

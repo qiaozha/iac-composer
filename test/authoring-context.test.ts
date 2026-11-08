@@ -68,6 +68,9 @@ test("all implementation topics work without a planning package and without netw
 test("SDK inventory distinguishes declarations from installed packages and reports missing dependencies", async (t) => {
   const root = await fixture(t);
   const inventory = await getIacComposerContext("sdk", { workspaceRoot: root });
+  assert.deepEqual(inventory.data.foundationPackages, ["@azure/provisioning-core"]);
+  assert.equal(inventory.data.serializationImport, "@azure/provisioning-core/serialization");
+  assert.equal(inventory.data.renderingImport, "@azure/provisioning-core/internal");
   assert.deepEqual(inventory.data.packages, [{
     packageName: "@azure/provisioning-storage", installed: true, version: "9.8.7",
   }]);
@@ -101,6 +104,31 @@ test("lookup returns actual installed SDK and runtime helper types without impor
   });
   assert.equal(page.matches[0]!.line, 5);
   assert.match(page.matches[0]!.excerpt, /^export declare class StorageAccount/);
+});
+
+test("SDK lookup skips nested module-format manifests published by Azure SDKs", async (t) => {
+  const root = await fixture(t);
+  const sdk = join(root, "node_modules/@azure/provisioning-storage");
+  await mkdir(join(sdk, "dist/commonjs"), { recursive: true });
+  await writeFile(join(sdk, "package.json"), JSON.stringify({
+    name: "@azure/provisioning-storage",
+    version: "9.8.7",
+    main: "dist/commonjs/index.js",
+    types: "index.d.ts",
+  }));
+  await writeFile(join(sdk, "dist/commonjs/package.json"), JSON.stringify({
+    name: "@azure/provisioning-storage",
+    version: "9.8.7",
+    type: "commonjs",
+    exports: { "./package.json": "./package.json" },
+  }));
+  await writeFile(join(sdk, "dist/commonjs/index.js"), 'throw new Error("Lookup must not execute SDK code");');
+  const reference = await getTypeScriptReference({
+    workspaceRoot: root, packageName: "@azure/provisioning-storage", symbol: "StorageAccount",
+  });
+  assert.equal(reference.version, "9.8.7");
+  assert.equal(reference.entrypoint, "index.d.ts");
+  assert.match(reference.matches[0]!.excerpt, /constructor/);
 });
 
 test("reference errors reject management SDKs, arbitrary files, missing symbols and symlink escapes", async (t) => {

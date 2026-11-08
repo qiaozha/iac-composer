@@ -1,36 +1,16 @@
-import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepParameterFile,
-  renderBicepFiles,
-} from "@azure/provisioning-bicep";
-import {
-  fn,
-  Stack,
-  type ExpressionOrValue,
-} from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
-import { UserAssignedIdentity } from "@azure/provisioning-managed-identity";
+import { bicepRef, createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
+import { UserAssignedIdentity } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
-import {
-  ApplicationInsightsComponent,
-  WebTest,
-} from "@azure/provisioning-applicationinsights";
-import {
-  ActionGroup,
-  DiagnosticSetting,
-  MetricAlert,
-} from "@azure/provisioning-monitor";
-import { Registry } from "@azure/provisioning-container-registry";
-import { AppServicePlan, Site } from "@azure/provisioning-appservice";
-import { Bot, Channel } from "@azure/provisioning-botservice";
+import { Component as ApplicationInsightsComponent, WebTest } from "@azure/provisioning-appinsights";
+import { ActionGroup, DiagnosticSetting, MetricAlert } from "../../runtime/provisioning.js";
+import { Registry } from "@azure/provisioning-containerregistry";
+import { AppServicePlan, Site } from "../../runtime/provisioning.js";
+import { Bot, Channel } from "../../runtime/provisioning.js";
 import { StorageAccount } from "@azure/provisioning-storage";
-import {
-  grantRole,
-  ManagementLock,
-  Role,
-  RoleAssignment,
-} from "@azure/provisioning-authorization";
+import { grantRole, ManagementLock, Role, RoleAssignment } from "../../runtime/provisioning.js";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 
@@ -206,9 +186,9 @@ const appInsights = new ApplicationInsightsComponent(stack, {
   location,
   kind: "web",
   properties: {
-    Application_Type: "web",
-    RetentionInDays: 90,
-    WorkspaceResourceId: workspace.id as any,
+    applicationType: "web",
+    retentionInDays: 90,
+    workspaceResourceId: workspace.id as any,
   },
 });
 
@@ -523,7 +503,7 @@ stack.outputs.add("FRONTEND_SITE_NAME", "string", site.name);
 
 const env = bicepRef<string>("env");
 const deployedFrontendImage = bicepRef<string>("deployedFrontendImage");
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   variables: {
     env: fn.readEnvironmentVariable("AZURE_ENV_NAME", "dev"),
@@ -604,7 +584,7 @@ const parameterFile = createBicepParameterFile("main.bicepparam", {
 });
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Frontend provisioning produced no Bicep entry file.");
 }

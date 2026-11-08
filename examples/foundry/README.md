@@ -69,9 +69,12 @@ setup, and bring-your-own agent data storage needs connections and role grants.
 
 ## Install and preview
 
-Run the following from the repository root with Node.js 20.6 or newer.
-The provisioning dependencies use the repository's bundled `0.1.0` packages,
-so installing this example does not need access to private GitHub release assets.
+Run the following from the repository root with Node.js 22 or newer.
+The provisioning dependencies use pinned public npm beta releases. Serialization,
+AST support, and Bicep rendering are included in core; no separate packages or
+vendored tarballs are needed. The local [provisioning helper](runtime/provisioning.ts)
+defines the deployer role assignment with core `Resource` and retains
+environment-bound parameter files.
 
 ```bash
 npm ci

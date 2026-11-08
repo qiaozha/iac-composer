@@ -236,21 +236,12 @@ function renderTeamsApplicationBlock(
   const configuration = asRecord(resource.configuration);
   const values = asRecord(configuration.manifestValues);
   const existingAppId = configuration.existingAppId;
-  const teamId = configuration.teamId;
   if (
     existingAppId !== undefined &&
     (typeof existingAppId !== "string" || !existingAppId.trim())
   ) {
     throw new Error(
       `${resource.id}.configuration.existingAppId must be a non-empty string.`,
-    );
-  }
-  if (
-    teamId !== undefined &&
-    (typeof teamId !== "string" || !teamId.trim())
-  ) {
-    throw new Error(
-      `${resource.id}.configuration.teamId must be a non-empty string.`,
     );
   }
   const entries = Object.entries(values)
@@ -265,7 +256,7 @@ function renderTeamsApplicationBlock(
     await provisionTeamsApplication(deployment, {
       component: ${JSON.stringify(component)},
       componentDirectory: resolve(packageRoot, ${JSON.stringify(source ?? ".")}),
-${existingAppId ? `      existingAppId: ${JSON.stringify(existingAppId)},\n` : ""}${teamId ? `      teamId: ${JSON.stringify(teamId)},\n` : ""}      manifestValues: {
+${existingAppId ? `      existingAppId: ${JSON.stringify(existingAppId)},\n` : ""}      manifestValues: {
 ${entries}
       },
       outputNames: ${JSON.stringify(resource.produces ?? [])},

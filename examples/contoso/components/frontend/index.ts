@@ -98,7 +98,6 @@ export async function frontend(deployment: Deployment): Promise<void> {
       component: "frontend",
       componentDirectory: resolve(packageRoot, "components/frontend"),
       existingAppId: "9668bcb5-a50b-4e39-a136-b3301305de66",
-      teamId: "af71663c-8492-4c4a-9ac4-a3dbaa71fa7b",
       manifestValues: {
         "BOT_ID": deploymentValue(deployment, "botClientId"),
         "DEVELOPER_NAME": "Contoso",

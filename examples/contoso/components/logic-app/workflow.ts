@@ -1,4 +1,5 @@
-import { fn, type ExpressionOrValue } from "@azure/provisioning-core";
+import { type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
 
 export interface AutoReplyWorkflowInputs {
   teamsChannelIds: ExpressionOrValue<string[]>;

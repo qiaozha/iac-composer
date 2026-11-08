@@ -189,10 +189,11 @@ export async function generateDeploymentCode(
         dependencies: {
           "iac-composer": `file:${localPackagePath}`,
           ...(requirements.resources.length > 0
-            ? provisioningDependencies(outputDirectory, repositoryRoot)
+            ? provisioningDependencies()
             : {}),
         },
         devDependencies: { "@types/node": "^24.0.0", typescript: "^6.0.0" },
+        engines: { node: ">=22.0.0" },
       },
       null,
       2,
@@ -246,6 +247,10 @@ export async function generateDeploymentCode(
     files.set(`components/${owner}/provisioning.ts`, source);
   }
   if (requirements.resources.length > 0) {
+    files.set(
+      "runtime/provisioning.ts",
+      await readFile(resolve(repositoryRoot, "src/runtime/provisioning.ts"), "utf8"),
+    );
     files.set(
       "components/shared/graph-provisioning.ts",
       renderGraphProvisioningHelper(),

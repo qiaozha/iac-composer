@@ -64,7 +64,7 @@ test("the packed runtime implements discovery and SDK authoring without the opti
   assert.equal(object(helper.structuredContent).status, "ready");
   assert.match(JSON.stringify(helper.structuredContent), /function ensureResourceGroup/);
   await t.test("a resource-only plan is authored as typed SDK source and previewed through the runtime", async (integration) => {
-    const libraries = ["core", "serialization", "bicep", "storage"];
+    const libraries = ["core", "storage"];
     const sdkRoot = join(repository, "examples/chatbot/node_modules/@azure");
     try {
       for (const library of libraries) await access(join(sdkRoot, `provisioning-${library}`));
@@ -85,37 +85,39 @@ test("the packed runtime implements discovery and SDK authoring without the opti
     await writeFile(join(workspace, "package.json"), JSON.stringify({
       type: "module", dependencies: {
         "iac-composer": "file:../runtime",
-        "@azure/provisioning-core": "0.1.0", "@azure/provisioning-serialization": "0.1.0",
-        "@azure/provisioning-bicep": "0.1.0", "@azure/provisioning-storage": "0.1.0",
+        "@azure/provisioning-core": "1.0.0-beta.2", "@azure/provisioning-storage": "1.0.0-beta.1",
       },
     }));
     await writeFile(join(workspace, "tsconfig.json"), JSON.stringify({
       compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: true, types: ["node"] },
       include: ["*.ts"],
     }));
+    await writeFile(join(workspace, "provisioning.ts"), await readFile(
+      join(repository, "tools/azure-infrastructure/src/runtime/provisioning.ts"), "utf8",
+    ));
     const sdk = await client!.callTool({
       name: "iac_composer_get_reference", arguments: { packageName: "@azure/provisioning-storage", symbol: "StorageAccount" },
     });
     assert.equal(object(sdk.structuredContent).status, "ready");
     assert.match(JSON.stringify(sdk.structuredContent), /constructor/);
     await writeFile(join(workspace, "infra.ts"), `
-import { Stack, fn } from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
+import { Stack } from "@azure/provisioning-core";
+import { fn } from "./provisioning.js";
 import { StorageAccount } from "@azure/provisioning-storage";
-import { renderBicepFiles, createBicepParameterFile, renderBicepParameterFile } from "@azure/provisioning-bicep";
+import { renderBicepFiles, createBicepParameterFile, renderBicepParameterFile } from "./provisioning.js";
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
 const storage = new StorageAccount(stack, {
   name: fn.concat("archive", fn.uniqueString(fn.resourceGroup().id)), location,
   kind: "StorageV2", sku: { name: "Standard_LRS" },
-  properties: { minimumTlsVersion: "TLS1_2", AllowBlobPublicAccess: false, allowSharedKeyAccess: false, EnableHttpsTrafficOnly: true }
+  properties: { minimumTlsVersion: "TLS1_2", allowBlobPublicAccess: false, allowSharedKeyAccess: false, enableHttpsTrafficOnly: true }
 });
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
-const [rendered] = renderBicepFiles(serialize([stack]));
+const [rendered] = renderBicepFiles([stack]);
 if (!rendered) throw new Error("Missing rendered stack");
 export const outputBicep = [
   { ...rendered, path: "main.bicep" },
-  renderBicepParameterFile(createBicepParameterFile("main.bicepparam", {
+  renderBicepParameterFile(createBicepParameterFile(stack, "main.bicepparam", {
     using: "./main.bicep", parameters: { location: fn.readEnvironmentVariable("AZURE_LOCATION") }
   }))
 ];`);

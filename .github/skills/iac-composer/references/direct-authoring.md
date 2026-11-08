@@ -87,6 +87,7 @@ export default defineDeployment(async (deployment) => {
     resourceGroup: requiredEnv("AZURE_RESOURCE_GROUP"),
     subscription: requiredEnv("AZURE_SUBSCRIPTION_ID"),
     location: requiredEnv("AZURE_LOCATION"),
+    parameters: { location: requiredEnv("AZURE_LOCATION") },
   });
 
   await deployment.env("publish infrastructure outputs", outputs);
@@ -103,13 +104,9 @@ must export a non-empty `outputBicep` array. The following shape uses the Azure
 JavaScript provisioning libraries:
 
 ```ts
-import {
-  createBicepParameterFile,
-  renderBicepFiles,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
+import { renderBicepFiles } from "@azure/provisioning-core/internal";
 import { fn, Stack } from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
+import { serialize } from "@azure/provisioning-core/serialization";
 import { StorageAccount } from "@azure/provisioning-storage";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
@@ -126,38 +123,35 @@ const storage = new StorageAccount(stack, {
   sku: { name: "Standard_LRS" },
   properties: {
     minimumTlsVersion: "TLS1_2",
-    AllowBlobPublicAccess: false,
+    allowBlobPublicAccess: false,
     allowSharedKeyAccess: false,
-    EnableHttpsTrafficOnly: true,
+    enableHttpsTrafficOnly: true,
   },
 });
 
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Provisioning produced no Bicep entry file.");
 }
 
-const parameterFile = createBicepParameterFile("main.bicepparam", {
-  using: "./main.bicep",
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-  },
-});
-
 export const outputBicep = [
   { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
 ];
 ```
 
 Use the provisioning packages and versions already selected by the target
 repository. Add only the resource-specific packages that the entrypoint imports.
-SDK input names can differ from ARM property names: in version 0.1,
-`AllowBlobPublicAccess` and `EnableHttpsTrafficOnly` render as
-`allowBlobPublicAccess` and `supportsHttpsTrafficOnly`. Inspect installed types
+Public npm provisioning SDKs require Node.js 22 or newer. Serialization, AST
+support, and Bicep rendering are bundled in core; do not install standalone
+serialization or Bicep packages. The core renderer accepts authored stacks,
+not the serialized JSON document. Supply deployment parameter values through
+`deployment.provision({ parameters: ... })`, or reuse an existing parameter-file
+helper when the project requires environment-bound `.bicepparam` files.
+SDK input names can differ from ARM property names: `enableHttpsTrafficOnly`
+renders as `supportsHttpsTrafficOnly`. Inspect installed types
 instead of suppressing mismatches with a broad cast.
 If a provisioning SDK type is temporarily incomplete, keep any type escape as
 narrow as possible around that SDK object.

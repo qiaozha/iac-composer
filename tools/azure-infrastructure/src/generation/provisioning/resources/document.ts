@@ -25,19 +25,11 @@ export function renderProvisioningPrelude({
         `import { ${plan.functionName} } from ${JSON.stringify(plan.importPath)};`,
     )
     .join("\n");
-  return `import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepFiles,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
-import { fn, Resource, Stack } from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
-import {
-  Account,
-  Deployment as ModelDeployment,
-  Project,
-} from "@azure/provisioning-cognitiveservices";
+  return `import { bicepRef, createBicepParameterFile, renderBicepFiles, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { Resource, Stack } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
+import { Account, Deployment as ModelDeployment, Project } from "@azure/provisioning-cognitiveservices";
 import {
   Container as CosmosContainer,
   DatabaseAccount,
@@ -49,23 +41,15 @@ import {
   Container as StorageContainer,
   StorageAccount,
 } from "@azure/provisioning-storage";
-import {
-  ConfigurationStore,
-  KeyValue,
-} from "@azure/provisioning-appconfiguration";
+import { ConfigurationStore, KeyValue } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
-import { ApplicationInsightsComponent } from "@azure/provisioning-applicationinsights";
-import { UserAssignedIdentity } from "@azure/provisioning-managed-identity";
-import { Registry } from "@azure/provisioning-container-registry";
-import {
-  ApiConnection,
-  AppServicePlan,
-  Site,
-  SiteConfigAuthsettingsV2,
-} from "@azure/provisioning-appservice";
-import { Bot, Channel } from "@azure/provisioning-botservice";
-import { RoleAssignment } from "@azure/provisioning-authorization";
-import { Workflow } from "@azure/provisioning-logic";
+import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
+import { UserAssignedIdentity } from "../../runtime/provisioning.js";
+import { Registry } from "@azure/provisioning-containerregistry";
+import { ApiConnection, AppServicePlan, Site, SiteConfigAuthsettingsV2 } from "../../runtime/provisioning.js";
+import { Bot, Channel } from "../../runtime/provisioning.js";
+import { RoleAssignment } from "../../runtime/provisioning.js";
+import { Workflow } from "../../runtime/provisioning.js";
 import { renderGraphStack } from ${JSON.stringify(owner && owner !== "shared" ? "../shared/graph-provisioning.js" : "./graph-provisioning.js")};
 ${workflowImports}
 
@@ -117,8 +101,8 @@ function renderFooter(context: RenderingContext): void {
   const graphRendering =
     context.graphResources.length > 0
       ? `const rendered = renderGraphStack(stack, [\n${context.graphResources.join("\n")}\n]);\nexport const outputJson = rendered.outputJson;\nconst renderedStack = rendered.main;`
-      : `export const outputJson = serialize([stack]);\nconst [renderedStack] = renderBicepFiles(outputJson);`;
-  context.addSection(`const parameterFile = createBicepParameterFile("main.bicepparam", {
+      : `export const outputJson = serialize([stack]);\nconst [renderedStack] = renderBicepFiles([stack]);`;
+  context.addSection(`const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
 ${bindings}

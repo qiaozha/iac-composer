@@ -626,7 +626,6 @@ test("reuses a configured Teams app manifest ID", async () => {
           requiredBy: ["frontend"],
           configuration: {
             existingAppId: "9668bcb5-a50b-4e39-a136-b3301305de66",
-            teamId: "af71663c-8492-4c4a-9ac4-a3dbaa71fa7b",
             manifestValues: {
               TEAMS_APP_ID: "9668bcb5-a50b-4e39-a136-b3301305de66",
               BOT_ID: "bot-id",
@@ -657,10 +656,7 @@ test("reuses a configured Teams app manifest ID", async () => {
     frontend,
     /existingAppId: "9668bcb5-a50b-4e39-a136-b3301305de66"/,
   );
-  assert.match(
-    frontend,
-    /teamId: "af71663c-8492-4c4a-9ac4-a3dbaa71fa7b"/,
-  );
+  assert.doesNotMatch(frontend, /\bteamId:/);
 });
 
 test("orders hosted agents before application services", async () => {
@@ -1001,7 +997,8 @@ test("connects hosted-agent monitoring to its Foundry project", () => {
     serviceManagementReference: "c29c71f8-2db7-4d9e-bf8b-e6b0965ecde4",
   });
 
-  assert.match(source, /import \{ fn, Resource, Stack \}/);
+  assert.match(source, /import \{ Resource, Stack \} from "@azure\/provisioning-core"/);
+  assert.match(source, /import \{ fn \} from "\.\.\/\.\.\/runtime\/provisioning\.js"/);
   assert.match(
     source,
     /new Resource\(foundryProjectProject, \{[\s\S]*?type: "Microsoft\.CognitiveServices\/accounts\/projects\/connections"/,
@@ -1012,7 +1009,7 @@ test("connects hosted-agent monitoring to its Foundry project", () => {
   assert.match(source, /authType: "ApiKey"/);
   assert.match(
     source,
-    /key: monitoringInsights\.properties\.ConnectionString as any/,
+    /key: monitoringInsights\.properties\.connectionString as any/,
   );
   assert.match(source, /ResourceId: monitoringInsights\.id/);
 });
@@ -1117,24 +1114,20 @@ test("renders explicit model, registry, and workflow identity resources", () => 
     assert.match(source, /\(workflow as any\)\.identity\.principalId as any/);
 });
 
-test("generated provisioning dependencies use bundled release assets", async () => {
-  const repositoryRoot = resolve(".");
-  const outputDirectory = resolve("generated/deployment");
-  const dependencies = provisioningDependencies(
-    outputDirectory,
-    repositoryRoot,
-  );
-  assert.ok(Object.keys(dependencies).length > 0);
+test("generated provisioning dependencies use pinned npmjs releases and bundled source helpers", async () => {
+  const dependencies = provisioningDependencies();
+  assert.equal(Object.keys(dependencies).length, 7);
+  assert.equal(dependencies["@azure/provisioning-core"], "1.0.0-beta.2");
+  assert.equal(dependencies["@azure/provisioning-containerregistry"], "1.0.0-beta.1");
+  assert.equal(dependencies["@azure/provisioning-appinsights"], "1.0.0-beta.1");
   for (const [name, value] of Object.entries(dependencies)) {
-    const packageName = name.slice("@azure/".length);
-    assert.equal(
-      value,
-      `file:../../vendor/azure-${packageName}-0.1.0.tgz`,
-      name,
-    );
-    await access(resolve(outputDirectory, value.slice("file:".length)));
+    assert.match(value, /^1\.0\.0-beta\.\d+$/, name);
   }
-
+  for (const obsolete of ["bicep", "serialization", "serialization-ast"]) {
+    assert.equal(Object.hasOwn(dependencies, `@azure/provisioning-${obsolete}`), false);
+  }
   const manifest = JSON.parse(await readFile(resolve("package.json"), "utf8"));
-  assert.ok(manifest.files.includes("vendor"));
+  assert.ok(!manifest.files.includes("vendor"));
+  assert.ok(manifest.files.includes("src/runtime/provisioning.ts"));
+  await access(resolve("src/runtime/provisioning.ts"));
 });

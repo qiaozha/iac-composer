@@ -36,12 +36,9 @@ stack.outputs.add(${JSON.stringify(entraOutput(plan.resource.id, "APPLICATION_UN
   const bindings = plans.map((plan) =>
     `    ${plan.base}ApplicationUniqueName: fn.readEnvironmentVariable(${JSON.stringify(entraOutput(plan.resource.id, "APPLICATION_UNIQUE_NAME"))}),`
   ).join("\n");
-  return `import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
-import { fn, Stack } from "@azure/provisioning-core";
+  return `import { bicepRef, createBicepParameterFile, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { Stack } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
 
 import { renderGraphStack } from "./graph-provisioning.js";
 
@@ -51,7 +48,7 @@ ${declarations}
 const rendered = renderGraphStack(stack, [
 ${resources}
 ]);
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
 ${bindings}

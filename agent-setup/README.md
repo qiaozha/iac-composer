@@ -30,10 +30,11 @@ The standalone local MCP binary is `iac-composer-mcp`, implemented in
 `tools/azure-infrastructure`, installing its skill, and preparing its contracts
 are **not** prerequisites.
 
-The consumer project declares the provisioning libraries it actually imports:
-`@azure/provisioning-core`, `@azure/provisioning-serialization`,
-`@azure/provisioning-bicep`, and resource-specific packages such as
-`@azure/provisioning-storage`. Inspect existing manifests/versions first; do
+The consumer project declares `@azure/provisioning-core` and resource-specific
+packages it actually imports, such as `@azure/provisioning-storage`.
+Public npm provisioning SDKs require Node.js 22 or newer. Core bundles
+serialization, AST support, and Bicep rendering; use its `/serialization` and
+`/internal` exports rather than separate packages. Inspect existing manifests/versions first; do
 not silently install an unrelated latest tool or a management SDK.
 
 ## 2. Install the implementation skill

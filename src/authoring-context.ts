@@ -93,9 +93,11 @@ export async function getIacComposerContext(
     }
     data = {
       ...await listProvisioningLibraries(options.workspaceRoot, options.projectDirectory),
-      foundationPackages: ["@azure/provisioning-core", "@azure/provisioning-serialization", "@azure/provisioning-bicep"],
+      foundationPackages: ["@azure/provisioning-core"],
+      serializationImport: "@azure/provisioning-core/serialization",
+      renderingImport: "@azure/provisioning-core/internal",
       resourcePackages: "@azure/provisioning-<service>",
-      sdkDocumentation: "https://github.com/Azure/js-provisioning-lib",
+      sdkDocumentation: "https://github.com/Azure/azure-sdk-for-js/tree/main/sdk/core/provisioning-core",
       lookup: "Use iac_composer_get_reference with the installed package and optional symbol or declaration file. A missing package is explicit; nothing is downloaded.",
       constraints: "Declarations describe the installed SDK, not a complete ARM/provider schema. Make unsupported-control fallbacks explicit.",
     };

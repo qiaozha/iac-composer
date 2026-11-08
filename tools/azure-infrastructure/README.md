@@ -128,7 +128,18 @@ This package deliberately uses a local `iac-composer: file:../..` dependency
 while it lives in this repository. To extract it into another repository,
 replace that dependency with a published or explicitly pinned runtime package.
 Generation resolves the installed runtime package rather than assuming a
-sibling source tree. The provisioning SDK tarballs are owned and packaged here.
+sibling source tree. Generated deployments require Node.js 22 or newer and use
+pinned public npm provisioning SDK releases. Core includes serialization, AST,
+and Bicep rendering; no standalone packages or vendored tarballs are required.
+Application Insights and Container Registry use the canonical npm names
+`@azure/provisioning-appinsights` and `@azure/provisioning-containerregistry`.
+
+The bundled [provisioning helper](src/runtime/provisioning.ts) is copied into
+generated deployments. It supplies typed core `Resource` definitions for services
+without public npm SDKs and retains the original ARM types, API versions, controls,
+and dependency scopes. It also preserves parameter-file variables/environment
+bindings, Graph extension declarations, and sequential model deployments, which
+the public core does not yet expose through equivalent authoring helpers.
 
 ## Agent workflow
 
@@ -321,7 +332,8 @@ active version is created. Teams manifest values are provisioned with Teams App
 CLI using environment-specific state. Generated deployments execute the
 component-authored `teamsapp.yml` from its source directory, matching the
 chatbot lifecycle while supplying generated manifest values through an isolated
-environment file. An interactive API connection must be authorized before its
+environment file. The helper does not automatically publish or install the app
+into a team; `teamId` is not a provisioning option. An interactive API connection must be authorized before its
 generated Logic App is enabled.
 
 Container resources with `authentication: "microsoft-entra"` receive an Entra
