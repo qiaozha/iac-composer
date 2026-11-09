@@ -250,7 +250,7 @@ export async function getTypeScriptReference(options: {
       options.symbol,
       truncated
         ? "Narrow lookup with a declaration file from the selected library."
-        : "Check the installed library/version and query an exported type. Do not invent SDK properties or silently substitute another infrastructure authoring method.",
+        : "Check the installed library/version and query an exported type. Do not invent provisioning library properties or silently substitute another infrastructure authoring method.",
     );
   }
   return {

@@ -539,7 +539,7 @@ export async function compileProvisioning(
       category: "compilation",
       message: `Could not load provisioning entrypoint '${resolvedEntrypoint}'.`,
       target: resolvedEntrypoint,
-      repair: "Check the entrypoint path, syntax, package module type, and provisioning SDK dependencies; run the project's typecheck.",
+      repair: "Check the entrypoint path, syntax, package module type, and provisioning library dependencies; run the project's typecheck.",
     }, { cause: error, message: error instanceof Error ? error.message : String(error) });
   }
   const files = resolveRenderedFiles(module, resolvedEntrypoint);

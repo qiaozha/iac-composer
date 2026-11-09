@@ -54,11 +54,16 @@ test("selection fixtures include positive, precedence and unrelated cases withou
   const matrix = JSON.parse(await readFile(resolve(setup, "evaluation/cases.json"), "utf8"));
   assert.equal(matrix.schemaVersion, "1.0");
   assert.equal(new Set(matrix.cases.map((entry: { id: string }) => entry.id)).size, matrix.cases.length);
-  for (const id of ["generic-api", "complete-plan", "plan-only", "explicit-terraform", "existing-azd", "non-azure", "ordinary-code"]) {
+  for (const id of ["generic-api", "complete-plan", "explicit-composer", "explicit-composer-bootstrap", "missing-service-library", "plan-only", "explicit-terraform", "existing-azd", "non-azure", "ordinary-code"]) {
     assert.ok(matrix.cases.some((entry: { id: string }) => entry.id === id));
   }
   for (const entry of matrix.cases) {
-    assert.doesNotMatch(entry.prompt, /iac-composer|azure-infrastructure|get_context/);
+    if (entry.selectionMode === "explicit") {
+      assert.match(entry.prompt, /iac-composer/);
+      assert.equal(entry.expectedRoute, "typescript-implementation");
+    } else {
+      assert.doesNotMatch(entry.prompt, /iac-composer|azure-infrastructure|get_context/);
+    }
   }
   const recorded = JSON.parse(await readFile(resolve(setup, "evaluation/result.template.json"), "utf8"));
   assert.equal(recorded.status, "not-executed");

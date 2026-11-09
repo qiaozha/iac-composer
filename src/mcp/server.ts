@@ -60,7 +60,7 @@ export async function createIacComposerMcpServer(
     inputSchema: z.object({
       topic: z.enum(implementationTopics).default("start"),
       projectDirectory: z.string().trim().min(1).optional()
-        .describe("SDK inventory only: Node project directory inside the workspace; default root."),
+        .describe("provisioning library inventory only: Node project directory inside the workspace; default root."),
     }).strict(),
     outputSchema,
     annotations,
@@ -78,7 +78,7 @@ export async function createIacComposerMcpServer(
     }
   });
   server.registerTool("iac_composer_get_reference", {
-    title: "Provisioning SDK and runtime helper types",
+    title: "Provisioning library and runtime helper types",
     description: implementationReferenceDescription,
     inputSchema: z.object({
       packageName: z.string().regex(referencePackagePattern).default("iac-composer")
@@ -90,7 +90,7 @@ export async function createIacComposerMcpServer(
       line: z.number().int().min(1).optional()
         .describe("Optional 1-based start line for a file excerpt; requires file and no symbol."),
       projectDirectory: z.string().trim().min(1).default(".")
-        .describe("Node project directory inside the workspace, for installed SDK resolution."),
+        .describe("Node project directory inside the workspace, for installed provisioning library resolution."),
     }).strict(),
     outputSchema,
     annotations,

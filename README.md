@@ -117,7 +117,7 @@ gh skill install qiaozha/iac-composer iac-composer \
 This uses the common `.agents/skills` project location supported by Copilot and
 Codex. The same runtime package owns the `iac-composer-mcp` binary and its
 read-only `iac_composer_get_context` and `iac_composer_get_reference` tools.
-They expose SDK Stack/resource authoring, actual installed TypeScript
+They expose provisioning-library Stack/resource authoring, actual installed TypeScript
 declarations, lifecycle helpers and validation/provision/deploy capabilities.
 The agent authors TypeScript directly and uses the existing runtime CLI for
 trusted preview and explicitly authorized execution.
@@ -161,8 +161,8 @@ than guessing resource properties or management-SDK request shapes.
 
 Library callers can use `describeRuntimeCapabilities(topic)`,
 `getIacComposerContext(topic)` and `getTypeScriptReference(options)` without
-spawning a CLI. SDK lookup requires a workspace and reads metadata/declarations
-only; it does not import SDK code, install libraries or provision resources.
+spawning a CLI. Provisioning-library lookup requires a workspace and reads metadata/declarations
+only; it does not import library code, install libraries or provision resources.
 
 Keep human logs and arbitrary program output separate from machine results:
 
@@ -311,7 +311,7 @@ provisioning dependencies are pinned to public npm beta releases in
 Insights uses `@azure/provisioning-appinsights` and Container Registry uses
 `@azure/provisioning-containerregistry`.
 There are no separate serialization, serialization-AST, or Bicep packages.
-Until all service SDKs are published, the example's
+Until all service provisioning libraries are published, the example's
 [provisioning helper](examples/chatbot/src/runtime/provisioning.ts) defines
 unavailable resources with typed core `Resource` subclasses and preserves
 parameter-file bindings, Graph extension resources, and sequential model updates.

@@ -16,7 +16,7 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-test("the packed runtime implements discovery and SDK authoring without the optional planner package", async (t) => {
+test("the packed runtime implements discovery and provisioning library authoring without the optional planner package", async (t) => {
   const scratch = await mkdtemp(join(tmpdir(), "iac standalone "));
   const installed = join(scratch, "runtime");
   const workspace = join(scratch, "consumer");
@@ -63,14 +63,14 @@ test("the packed runtime implements discovery and SDK authoring without the opti
   });
   assert.equal(object(helper.structuredContent).status, "ready");
   assert.match(JSON.stringify(helper.structuredContent), /function ensureResourceGroup/);
-  await t.test("a resource-only plan is authored as typed SDK source and previewed through the runtime", async (integration) => {
+  await t.test("a resource-only plan is authored as typed provisioning library source and previewed through the runtime", async (integration) => {
     const libraries = ["core", "storage"];
     const sdkRoot = join(repository, "examples/chatbot/node_modules/@azure");
     try {
       for (const library of libraries) await access(join(sdkRoot, `provisioning-${library}`));
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-        integration.skip("Real provisioning SDKs are not installed; standalone MCP isolation was still verified.");
+        integration.skip("Real provisioning libraries are not installed; standalone MCP isolation was still verified.");
         return;
       }
       throw error;

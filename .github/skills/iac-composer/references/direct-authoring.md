@@ -3,15 +3,68 @@
 Use this workflow to implement Azure resource requirements as TypeScript with
 the Azure JavaScript provisioning libraries and `iac-composer`. It works with
 requirements from any planner or the user; no planner-specific contract is
-needed. Use SDK resource references for dependencies and runtime helpers for
+needed. Use provisioning library resource references for dependencies and runtime helpers for
 ordered provisioning, application configuration, readiness, and deployment.
 
-Use the installed SDK declarations rather than Azure management-SDK request
+Use the installed provisioning library declarations rather than Azure management-SDK request
 shapes or guessed properties. `iac_composer_get_reference` can look up a
 provisioning type or an `iac-composer` helper without executing either package.
 Handwritten Bicep and resource-creation CLI scripts are not the default authored
 representation; generated Bicep and azd/CLI execution remain implementation
-details. Make any unsupported-resource fallback explicit.
+details. Make any unsupported-resource fallback explicit. Selecting this
+implementation requires both real provisioning library resource definitions and
+`deployment.provision`; a wrapper around a separate Bicep/CLI lifecycle is not
+equivalent.
+
+## Bootstrap dependencies before authoring
+
+1. Inspect the target project's manifest, lockfile, Node version and approved
+   package sources. Use Node.js 22 or newer for the provisioning libraries.
+   Declare `iac-composer`, `@azure/provisioning-core` and only the service
+   packages actually needed; update the manifest before installing with the
+   existing package manager. Preserve selected versions and the lockfile.
+2. Resolve `iac-composer` through its public package export from the authored
+   project. A globally installed CLI does not make ESM imports resolve locally.
+   Reuse an approved built package/archive or configured registry when the
+   runtime is private/unpublished. A registry 404 is a package-source blocker,
+   not authorization to rewrite the deployment in raw Bicep. Never persist an
+   absolute host path such as `/opt/.../iac-composer/dist/index.js`.
+3. Inventory the actual project, then request only the declarations needed:
+
+   ```json
+   {"topic":"sdk","projectDirectory":"."}
+   {"packageName":"@azure/provisioning-storage","symbol":"StorageAccount","projectDirectory":"."}
+   {"packageName":"@azure/provisioning-core","symbol":"Resource","projectDirectory":"."}
+   {"packageName":"iac-composer","symbol":"ProvisionOptions","projectDirectory":"."}
+   ```
+
+   The first request is for `iac_composer_get_context`; the others are for
+   `iac_composer_get_reference`. `projectDirectory` selects the Node project
+   inside the registered workspace, such as `.` or `deployment`, not a global
+   tooling directory outside it. Omit it for non-inventory context topics such as
+   `start` and `authoring`. Empty inventory or `SDK_PACKAGE_UNAVAILABLE` means
+   establish the project dependencies and retry, not that a resource is
+   unsupported. Do not guess service-package spellings from ARM type names.
+4. Keep skill/reference assets, the executing CLI/MCP package and provisioning library imports
+   compatible. If MCP advertises standalone serialization/Bicep packages while
+   the selected core provisioning library/reference bundles them, repair the mismatched runtime
+   or package selection first. Do not mix the two API generations, install
+   obsolete packages to follow stale metadata, or bypass workspace boundaries.
+   If the approved matching package is unavailable, report the exact blocker.
+
+Expose the real local program through the canonical project command:
+
+```json
+{
+  "scripts": {
+    "deploy": "iac-composer ./deployment/deploy.ts",
+    "preview": "npm run deploy -- --dry-run"
+  }
+}
+```
+
+The script alone is not proof of provisioning library resource authoring. Check its provisioning
+entrypoints, imports, generated artifacts and `deployment.provision` steps.
 
 ## Recommended layout
 
@@ -60,7 +113,6 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   defineDeployment,
-  ensureResourceGroup,
   requiredEnv,
   type ProvisioningLayer,
 } from "iac-composer";
@@ -72,14 +124,6 @@ const coreLayer: ProvisioningLayer = {
 };
 
 export default defineDeployment(async (deployment) => {
-  await deployment.deploy("ensure resource group", async () => {
-    await ensureResourceGroup(deployment, {
-      name: requiredEnv("AZURE_RESOURCE_GROUP"),
-      subscription: requiredEnv("AZURE_SUBSCRIPTION_ID"),
-      location: requiredEnv("AZURE_LOCATION"),
-    });
-  });
-
   const outputs = await deployment.provision("core infrastructure", {
     layer: coreLayer,
     deploymentName: `${deployment.environment ?? "dev"}-core`,
@@ -96,6 +140,8 @@ export default defineDeployment(async (deployment) => {
 
 Use `deployment.env` for values needed later in the same run. Use the
 repository's azd environment helper when outputs must survive future runs.
+This example uses an existing authorized resource group. Add an
+`ensureResourceGroup` action only when creating the group is explicitly in scope.
 
 ## Minimal provisioning entrypoint
 
@@ -139,22 +185,71 @@ if (renderedStack === undefined) {
 
 export const outputBicep = [
   { ...renderedStack, path: "main.bicep" },
+  {
+    path: "main.bicepparam",
+    contents: [
+      "using './main.bicep'",
+      "param location = readEnvironmentVariable('AZURE_LOCATION')",
+      "",
+    ].join("\n"),
+  },
 ];
 ```
 
 Use the provisioning packages and versions already selected by the target
 repository. Add only the resource-specific packages that the entrypoint imports.
-Public npm provisioning SDKs require Node.js 22 or newer. Serialization, AST
+Public npm provisioning libraries require Node.js 22 or newer. Serialization, AST
 support, and Bicep rendering are bundled in core; do not install standalone
 serialization or Bicep packages. The core renderer accepts authored stacks,
 not the serialized JSON document. Supply deployment parameter values through
-`deployment.provision({ parameters: ... })`, or reuse an existing parameter-file
-helper when the project requires environment-bound `.bicepparam` files.
-SDK input names can differ from ARM property names: `enableHttpsTrafficOnly`
+`deployment.provision({ parameters: ... })`. The entrypoint must also emit the
+selected `.bicepparam` artifact, including environment-variable bindings for
+its parameters: the `parameters` option supplies values but does not create that
+file. Reuse an existing parameter-file helper for larger parameter sets. The
+small example emits only parameter bindings as text; resource definitions
+remain provisioning-library-authored and library-rendered.
+Provisioning-library input names can differ from ARM property names: `enableHttpsTrafficOnly`
 renders as `supportsHttpsTrafficOnly`. Inspect installed types
 instead of suppressing mismatches with a broad cast.
-If a provisioning SDK type is temporarily incomplete, keep any type escape as
-narrow as possible around that SDK object.
+If a provisioning library type is temporarily incomplete, keep any type escape as
+narrow as possible around that provisioning library object.
+
+## Missing service provisioning libraries are not a raw-Bicep default
+
+Prefer the installed service-specific class. If that package/type is not
+published or does not cover the required resource, inspect the public
+`Resource` and `ResourceProps` declarations in the selected core provisioning library. Core
+`Resource` can keep the unsupported service in the same authored Stack,
+dependency/output graph, renderer and `deployment.provision` pipeline:
+
+```ts
+import { Resource } from "@azure/provisioning-core";
+
+const network = new Resource(stack, {
+  type: "Microsoft.Network/virtualNetworks",
+  apiVersion: "2024-05-01",
+  name: "application-network",
+  location,
+  properties: {
+    addressSpace: { addressPrefixes: ["10.0.0.0/16"] },
+  },
+});
+stack.outputs.add("NETWORK_ID", "string", network.id);
+```
+
+Here `stack` and `location` come from the provisioning entrypoint above. Verify
+the requested ARM type, API version and control shapes against authoritative
+provider documentation; generic `Resource` is not a service-specific schema
+validator. Document why the typed service class could not be used. This is
+still provisioning-library authoring, not a handwritten template fallback.
+
+Only a demonstrated provisioning library/renderer limitation justifies a narrower external
+fallback, subject to the user's implementation constraints. Identify the
+installed package/version and missing capability, keep supported resources in
+TypeScript, and surface conflicts rather than replacing the entire resource
+graph with CLI calls. Data-plane initialization, image builds, application
+deployment and bounded post-provisioning configuration may use
+`deployment.deploy`/helpers after their infrastructure outputs exist.
 
 ## Provision options
 

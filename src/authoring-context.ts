@@ -9,11 +9,12 @@ export const implementationTopics = [
 export type ImplementationTopic = (typeof implementationTopics)[number];
 
 export const implementationRouting = {
-  useWhen: "Implement, create or modify Azure infrastructure as TypeScript with Azure JavaScript provisioning libraries and iac-composer when no implementation tool is specified.",
+  useWhen: "Implement, create or modify Azure infrastructure with Azure JavaScript provisioning libraries and iac-composer when explicitly requested or when no implementation tool is specified.",
   precedence: [
     "Honor higher-priority instructions and explicit implementation-tool choices.",
-    "Preserve existing compatible Terraform, Bicep, azd or other IaC conventions; do not migrate them implicitly.",
-    "Otherwise prefer @azure/provisioning-* TypeScript resource constructs, SDK references and iac-composer composition/helpers over handwritten Bicep or ad hoc resource-creation scripts.",
+    "An explicit iac-composer implementation request requires provisioning-library-authored resources and deployment.provision, not just discovery or a defineDeployment/deployment.deploy wrapper around handwritten Bicep and CLI provisioning.",
+    "Preserve maintained compatible Terraform, Bicep, azd or other IaC unless migration is requested. Artifacts from the current incomplete attempt do not override the selected implementation method; surface incompatible resumption constraints instead of silently migrating or claiming wrapper-only compliance.",
+    "Otherwise prefer @azure/provisioning-* TypeScript resource constructs, provisioning library references and iac-composer composition/helpers over handwritten Bicep or ad hoc resource-creation scripts.",
   ],
   planning: "Accept resource requirements from the user or any planning workflow. No particular planner, logical resource-kind vocabulary, generator or JSON contract is required. Resolve architecture gaps separately without mandating a provider.",
   exclusions: [
@@ -24,10 +25,10 @@ export const implementationRouting = {
 } as const;
 
 export const implementationContextDescription =
-  "Create and modify Azure infrastructure as TypeScript using @azure/provisioning-* libraries and iac-composer. Get direct resource-authoring, SDK, helper, validation and provision/deploy guidance when choosing an implementation method. Works with requirements from any planner or the user, without planner-specific contracts. Honor explicit tools and existing IaC. Read-only; no cloud execution.";
+  "Implement Azure infrastructure with @azure/provisioning-* resources and iac-composer when explicitly requested or selecting a method. Requires provisioning-library-authored resource entrypoints and deployment.provision, not a wrapper around raw Bicep/CLI provisioning. Get dependency bootstrap, resource/library/helper and validation/deployment guidance from any planner or the user. Honor explicit alternatives and maintained IaC. Read-only; no cloud execution.";
 
 export const implementationReferenceDescription =
-  "Look up actual installed TypeScript declarations for Azure provisioning-library resource constructs, Stack/expressions and iac-composer helper APIs. Prefer these types over guessing management-SDK request shapes or handwritten Bicep. Does not execute package code, download packages, select Azure services or require a planner.";
+  "Look up installed TypeScript declarations for provisioning-library resources, core Resource/Stack/expressions and iac-composer public APIs. Resolve provisioning libraries from a Node project inside the registered workspace; missing dependencies require manifest/install repair, not raw Bicep. Does not execute code, download packages, select services or require a planner.";
 
 export async function getIacComposerContext(
   topic = "start",
@@ -43,7 +44,7 @@ export async function getIacComposerContext(
   if (topic !== "sdk" && options.projectDirectory !== undefined) {
     throw new IacComposerError({
       code: "CONTEXT_ARGUMENT_INVALID", category: "usage",
-      message: "projectDirectory applies only to SDK inventory.",
+      message: "projectDirectory applies only to provisioning library inventory.",
       property: "projectDirectory", repair: "Use the sdk topic or omit projectDirectory.",
     });
   }
@@ -54,17 +55,21 @@ export async function getIacComposerContext(
       topics: implementationTopics,
       implementation: {
         source: "Customer-owned TypeScript; no intermediary generator contract is necessary.",
-        resourceDefinitions: "@azure/provisioning-* constructs in Stack objects, with SDK references for dependencies.",
+        resourceDefinitions: "@azure/provisioning-* constructs in Stack objects, with provisioning library references for dependencies.",
         render: "Serialize and render the stack; export a non-empty outputBicep array of { path, contents }.",
         composition: "Default-export defineDeployment; call deployment.provision in business order and wire returned outputs.",
+        dependencies: "Declare and install approved project-local iac-composer/core/service packages before lookup. A CLI on PATH is not a local ESM dependency. Use public package imports; never persist absolute host dist paths. Registry/access failures are blockers, not resource-support evidence.",
+        fallback: "Prefer service-specific types. For a missing service provisioning library/type, inspect @azure/provisioning-core Resource and retain the Stack/render/provision pipeline. A genuine external fallback needs a specific installed-version capability gap and must respect explicit user constraints.",
+        notEvidence: "Skill activation, reference reads, a CLI invocation or one deployment.deploy callback around az deployment do not establish provisioning-library resource authoring.",
         helpers: "Use iac-composer environment, azd, identity/access, readiness and deployment helpers for ordered lifecycle operations.",
         artifacts: "Bicep, parameters and azd manifests are generated output, not the default authored source.",
       },
       workflow: [
         "Preserve the selected Azure resources and controls, regardless of which planner supplied them.",
-        "Inspect existing source, dependencies and installed provisioning-library declarations.",
+        "Inspect source and establish approved project-local dependencies before looking up installed provisioning-library declarations.",
+        "Resolve references inside the registered workspace. Repair missing packages or mismatched CLI/MCP/skill assets; do not substitute handwritten Bicep for a configuration failure.",
         "Author typed resources and relationships, render outputBicep, and compose ordered provision/deploy steps.",
-        "Typecheck, inspect Bicep and run a trusted local --dry-run --report preview.",
+        "Typecheck and run a trusted local --dry-run --report <path> preview; require compiled resource artifacts and ordered provision steps, not only a skipped deploy wrapper.",
         "Only provision/deploy to Azure when explicitly authorized.",
       ],
       effects: { context: "read-only", references: "read-only", dryRun: "trusted code execution and local artifact writes", run: "infrastructure/application mutations" },
@@ -87,7 +92,7 @@ export async function getIacComposerContext(
     if (!options.workspaceRoot) {
       throw new IacComposerError({
         code: "WORKSPACE_REQUIRED", category: "configuration",
-        message: "SDK inventory requires an explicit workspace.",
+        message: "provisioning library inventory requires an explicit workspace.",
         repair: "Configure the MCP workspace or supply workspaceRoot to the context API.",
       });
     }
@@ -98,8 +103,8 @@ export async function getIacComposerContext(
       renderingImport: "@azure/provisioning-core/internal",
       resourcePackages: "@azure/provisioning-<service>",
       sdkDocumentation: "https://github.com/Azure/azure-sdk-for-js/tree/main/sdk/core/provisioning-core",
-      lookup: "Use iac_composer_get_reference with the installed package and optional symbol or declaration file. A missing package is explicit; nothing is downloaded.",
-      constraints: "Declarations describe the installed SDK, not a complete ARM/provider schema. Make unsupported-control fallbacks explicit.",
+      lookup: "Use iac_composer_get_reference with the installed package and optional symbol/file, selecting a Node project inside the registered workspace. Empty inventory or SDK_PACKAGE_UNAVAILABLE requires dependency-manifest/install repair; nothing is downloaded by lookup.",
+      constraints: "Declarations describe the installed provisioning library, not a complete provider schema. Prefer core Resource for missing service provisioning libraries before any bounded external fallback. Align executing CLI/MCP and skill/reference versions before mixing API generations.",
     };
   } else if (topic === "helpers") {
     data = {

@@ -19,7 +19,7 @@ async function fixture(t: TestContext): Promise<string> {
   await writeFile(join(sdk, "package.json"), JSON.stringify({
     name: "@azure/provisioning-storage", version: "9.8.7", main: "index.js", types: "index.d.ts",
   }));
-  await writeFile(join(sdk, "index.js"), 'throw new Error("SDK code must never execute during lookup");');
+  await writeFile(join(sdk, "index.js"), 'throw new Error("provisioning library code must never execute during lookup");');
   await writeFile(join(sdk, "index.d.ts"), 'export { StorageAccount, StorageAccountProps } from "./models/storage.js";\n');
   await writeFile(join(sdk, "models/storage.d.ts"), [
     "export interface StorageAccountProps {",
@@ -44,8 +44,25 @@ test("implementation context prefers typed resource authoring, not a particular 
   assert.match(JSON.stringify(context), /@azure\/provisioning/);
   assert.match(JSON.stringify(context), /any planning workflow/);
   assert.match(JSON.stringify(context), /deployment\.provision/);
+  assert.doesNotMatch(JSON.stringify(context), /(?<!management[- ])\bSDKs?\b/);
   assert.doesNotMatch(JSON.stringify(context), /azure-infrastructure|resourcesFile|solutionFile|implementation-contract\.json/);
   assert.equal(Object.hasOwn(context.data, "generationInputs"), false);
+});
+
+test("explicit selection requires resource authoring and provisioning rather than a wrapper", async () => {
+  const context = await getIacComposerContext();
+  const contents = JSON.stringify(context.data);
+  assert.match(contents, /when explicitly requested/);
+  assert.match(contents, /provisioning-library-authored resources and deployment\.provision/);
+  assert.match(contents, /project-local/);
+  assert.match(contents, /Registry\/access failures are blockers/);
+  assert.match(contents, /@azure\/provisioning-core Resource/);
+  assert.match(contents, /not only a skipped deploy wrapper/);
+  assert.match(contents, /incompatible resumption constraints/);
+  const authoring = await getIacComposerContext("authoring");
+  assert.match(String(authoring.data.contents), /new Resource\(stack/);
+  assert.match(String(authoring.data.contents), /projectDirectory.*selects the Node project/);
+  assert.match(String(authoring.data.contents), /registry 404 is a package-source blocker/);
 });
 
 test("all implementation topics work without a planning package and without network access", async (t) => {
@@ -65,7 +82,7 @@ test("all implementation topics work without a planning package and without netw
   assert.deepEqual(provisioning.data.capabilities, describe("provisioning"));
 });
 
-test("SDK inventory distinguishes declarations from installed packages and reports missing dependencies", async (t) => {
+test("provisioning library inventory distinguishes declarations from installed packages and reports missing dependencies", async (t) => {
   const root = await fixture(t);
   const inventory = await getIacComposerContext("sdk", { workspaceRoot: root });
   assert.deepEqual(inventory.data.foundationPackages, ["@azure/provisioning-core"]);
@@ -84,7 +101,7 @@ test("SDK inventory distinguishes declarations from installed packages and repor
   await assert.rejects(getIacComposerContext("sdk"), code("WORKSPACE_REQUIRED"));
 });
 
-test("lookup returns actual installed SDK and runtime helper types without importing SDK code", async (t) => {
+test("lookup returns actual installed provisioning library and runtime helper types without importing provisioning library code", async (t) => {
   const root = await fixture(t);
   const reference = await getTypeScriptReference({
     workspaceRoot: root, packageName: "@azure/provisioning-storage", symbol: "StorageAccount",
@@ -106,7 +123,7 @@ test("lookup returns actual installed SDK and runtime helper types without impor
   assert.match(page.matches[0]!.excerpt, /^export declare class StorageAccount/);
 });
 
-test("SDK lookup skips nested module-format manifests published by Azure SDKs", async (t) => {
+test("provisioning library lookup skips nested module-format manifests published by Azure provisioning libraries", async (t) => {
   const root = await fixture(t);
   const sdk = join(root, "node_modules/@azure/provisioning-storage");
   await mkdir(join(sdk, "dist/commonjs"), { recursive: true });
@@ -122,7 +139,7 @@ test("SDK lookup skips nested module-format manifests published by Azure SDKs", 
     type: "commonjs",
     exports: { "./package.json": "./package.json" },
   }));
-  await writeFile(join(sdk, "dist/commonjs/index.js"), 'throw new Error("Lookup must not execute SDK code");');
+  await writeFile(join(sdk, "dist/commonjs/index.js"), 'throw new Error("Lookup must not execute provisioning library code");');
   const reference = await getTypeScriptReference({
     workspaceRoot: root, packageName: "@azure/provisioning-storage", symbol: "StorageAccount",
   });
