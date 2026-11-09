@@ -57,6 +57,11 @@ installed provisioning-library and runtime-helper TypeScript declarations.
 - Treat generated Bicep, `azure.yaml`, `.azure/`, and
   `.iac-composer-generated.json` as artifacts. Change their authored inputs
   rather than patching generated files.
+- For fractional numbers emitted into Bicep, use a provisioning expression such
+  as `fn.json("0.25")` from `@azure/provisioning-core`, not a raw fractional
+  literal. Preserve the exact requested value and sizing; never round it up.
+  Follow [fractional numeric values](./references/direct-authoring.md#fractional-numeric-values)
+  and validate local rendering before provisioning.
 - Preserve lifecycle order. Do not parallelize steps whose inputs or side
   effects depend on earlier steps.
 - Fail explicitly for missing required configuration, unknown components,

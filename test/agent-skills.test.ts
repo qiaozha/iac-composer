@@ -43,6 +43,8 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.doesNotMatch(String(runtime.description), /\bSDKs?\b/);
   const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
+  assert.match(skill, /fn\.json\("0\.25"\)/);
+  assert.match(reference, /Typechecking\s+alone does not catch this serialization error/);
   for (const contents of [skill, reference]) {
     assert.doesNotMatch(contents, /(?<!management[- ])\bSDKs?\b/);
   }
@@ -50,7 +52,7 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.equal(typeof describeRuntimeCapabilities("overview"), "object");
 });
 
-test("documented provisioning library resources and core Resource fallback typecheck and compile in a real CLI dry run", async (t) => {
+test("documented provisioning library resources, fractional values and core Resource fallback typecheck and compile in a real CLI dry run", async (t) => {
   const consumer = await mkdtemp(join(tmpdir(), "iac-composer-authoring-contract-"));
   t.after(() => rm(consumer, { recursive: true, force: true }));
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
@@ -58,9 +60,28 @@ test("documented provisioning library resources and core Resource fallback typec
   const program = blocks.find(block => block.includes("const coreLayer"));
   const resources = blocks.find(block => block.includes("new StorageAccount"));
   const fallback = blocks.find(block => block.includes("new Resource(stack"));
-  assert.ok(program && resources && fallback);
+  const fractional = blocks.find(block => block.includes("const containerResources"));
+  assert.ok(program && resources && fallback && fractional);
   assert.ok(resources.includes("export const outputJson"));
-  const provisioning = resources.replace("export const outputJson", `${fallback}\nexport const outputJson`);
+  const fractionalResource = `
+${fractional.replace('import { fn } from "@azure/provisioning-core";', "")}
+new Resource(stack, {
+  type: "Microsoft.App/containerApps",
+  apiVersion: "2025-07-01",
+  name: "fractional-cpu-contract",
+  location,
+  properties: {
+    template: {
+      containers: [{
+        name: "chat",
+        image: "example.invalid/chat:unit",
+        resources: containerResources,
+      }],
+    },
+  },
+});
+`;
+  const provisioning = resources.replace("export const outputJson", `${fallback}\n${fractionalResource}\nexport const outputJson`);
   const directory = join(consumer, "deployment");
   await mkdir(directory);
   await writeFile(join(directory, "deploy.ts"), program);
@@ -108,6 +129,8 @@ test("documented provisioning library resources and core Resource fallback typec
   const generated = await readFile(report.artifacts[0]!.templateFile, "utf8");
   assert.match(generated, /Microsoft\.Storage\/storageAccounts@/);
   assert.match(generated, /Microsoft\.Network\/virtualNetworks@2024-05-01/);
+  assert.match(generated, /Microsoft\.App\/containerApps@2025-07-01/);
+  assert.match(generated, /cpu:\s*json\('0\.25'\)/);
   assert.match(generated, /output NETWORK_ID string/);
   assert.match(generated, /output STORAGE_ACCOUNT_NAME string/);
   await assert.rejects(access(marker), { code: "ENOENT" });
