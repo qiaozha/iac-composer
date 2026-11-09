@@ -214,6 +214,35 @@ instead of suppressing mismatches with a broad cast.
 If a provisioning library type is temporarily incomplete, keep any type escape as
 narrow as possible around that provisioning library object.
 
+## Fractional numeric values
+
+Bicep numeric literals and some provisioning serializers support integers only.
+A raw TypeScript fraction such as `cpu: 0.25` can therefore fail with
+`Bicep serialization currently only supports integer numbers.` Typechecking
+alone does not catch this serialization error.
+
+Use the public `fn.json` expression from `@azure/provisioning-core` with a JSON
+**string**, not a numeric argument:
+
+```ts
+import { fn } from "@azure/provisioning-core";
+
+const containerResources = {
+  cpu: fn.json("0.25"),
+  memory: "0.5Gi",
+};
+```
+
+Use `containerResources` as the container's resource settings. The generated
+Bicep must contain `cpu: json('0.25')`, which compiles to an ARM expression
+preserving the fractional value. Inspect the selected core library's `fn.json`
+declaration if needed; this is an expression, not a raw floating-point literal.
+
+Run the local provisioning render and CLI dry run before any authorized Azure
+execution. Validate the generated Bicep with `bicep build` when the compiler is
+available. If rendering fails, fix the TypeScript input and regenerate; do not
+patch generated Bicep, round CPU to an integer, or change the approved sizing.
+
 ## Missing service provisioning libraries are not a raw-Bicep default
 
 Prefer the installed service-specific class. If that package/type is not
