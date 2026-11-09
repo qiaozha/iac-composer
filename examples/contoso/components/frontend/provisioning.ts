@@ -1,16 +1,8 @@
-import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepFiles,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
-import { fn, Stack } from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
-import {
-  Account,
-  Deployment as ModelDeployment,
-  Project,
-} from "@azure/provisioning-cognitiveservices";
+import { bicepRef, createBicepParameterFile, renderBicepFiles, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { Stack } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
+import { Account, Deployment as ModelDeployment, Project } from "@azure/provisioning-cognitiveservices";
 import {
   Container as CosmosContainer,
   DatabaseAccount,
@@ -22,23 +14,15 @@ import {
   Container as StorageContainer,
   StorageAccount,
 } from "@azure/provisioning-storage";
-import {
-  ConfigurationStore,
-  KeyValue,
-} from "@azure/provisioning-appconfiguration";
+import { ConfigurationStore, KeyValue } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
-import { ApplicationInsightsComponent } from "@azure/provisioning-applicationinsights";
-import { UserAssignedIdentity } from "@azure/provisioning-managed-identity";
-import { Registry } from "@azure/provisioning-container-registry";
-import {
-  ApiConnection,
-  AppServicePlan,
-  Site,
-  SiteConfigAuthsettingsV2,
-} from "@azure/provisioning-appservice";
-import { Bot, Channel } from "@azure/provisioning-botservice";
-import { RoleAssignment } from "@azure/provisioning-authorization";
-import { Workflow } from "@azure/provisioning-logic";
+import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
+import { UserAssignedIdentity } from "../../runtime/provisioning.js";
+import { Registry } from "@azure/provisioning-containerregistry";
+import { ApiConnection, AppServicePlan, Site, SiteConfigAuthsettingsV2 } from "../../runtime/provisioning.js";
+import { Bot, Channel } from "../../runtime/provisioning.js";
+import { RoleAssignment } from "../../runtime/provisioning.js";
+import { Workflow } from "../../runtime/provisioning.js";
 import { renderGraphStack } from "../shared/graph-provisioning.js";
 
 
@@ -191,7 +175,7 @@ stack.outputs.add("botIdentityPrincipalId", "string", botIdentityIdentity.proper
 stack.outputs.add("botIdentityResourceId", "string", botIdentityIdentity.id);
 stack.outputs.add("tenantId", "string", botIdentityIdentity.properties.tenantId as any);
 stack.outputs.add("DEPLOY_RESOURCE_FRONTENDCOMPUTE_NAME", "string", frontendComputeSite.name);
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
@@ -203,7 +187,7 @@ const parameterFile = createBicepParameterFile("main.bicepparam", {
 });
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Generated provisioning produced no Bicep entry file.");
 }

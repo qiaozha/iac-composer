@@ -22,6 +22,8 @@ before drawing reliability or cost conclusions.
 Block real Azure operations and provide no cloud credentials. Use only
 synthetic application/plan data. Do not disable host trust or tool approvals.
 No live model calls or host installation are performed by this fixture.
+Run explicit-selection cases separately from automatic discovery cases; they
+test implementation compliance, not spontaneous selection rate.
 
 ## Record four separate outcomes
 
@@ -38,12 +40,28 @@ No live model calls or host installation are performed by this fixture.
 
 Capture actual tool activity or host logs for every claimed selection/handoff.
 An answer saying "I used iac-composer" is not evidence. Record the relevant log
-location/event IDs in `evidence` without copying secrets. Do not count SDK
+location/event IDs in `evidence` without copying secrets. Do not count provisioning library
 protocol tests as model-selection trials.
+
+For a selected iac-composer implementation, inspect both halves: provisioning library resource
+constructs in an authored Stack that renders non-empty `outputBicep`, and a
+program that calls `deployment.provision` and consumes its outputs. A public
+package import, CLI invocation or `defineDeployment`/`deployment.deploy`
+wrapper around handwritten Bicep and direct `az deployment` calls does not
+satisfy that outcome. Dry-run evidence must include compilation and generated
+resource artifacts/provision steps, not merely a skipped callback.
+
+The explicit bootstrap case starts with no project provisioning library dependencies despite an
+available CLI. Check manifest/lockfile repair, project-local public imports and
+workspace-scoped declarations. Registry/access errors or conflicting
+CLI/MCP/skill references must be reported or repaired, not relabeled as an
+unsupported-resource exception. For a missing service provisioning library, check public core
+`Resource` before a bounded, explained external fallback. These fixture checks
+are not evidence that a live model will follow the revised guidance.
 
 The key isolation trial provides a resource plan from another tool or the user,
 installs only iac-composer, and withholds the optional recognition/generator
-package. Passing means authored TypeScript SDK resources and an ordered
+package. Passing means authored TypeScript provisioning library resources and an ordered
 deployment program, not a detour through a specific recognition skill or
 resource-requirements JSON. Include infrastructure-only requirements so the
 agent does not add compute to satisfy a generator's component vocabulary.

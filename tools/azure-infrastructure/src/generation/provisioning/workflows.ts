@@ -37,7 +37,8 @@ export function renderWorkflowDefinitionSources(
     const component = resource.requiredBy[0] ?? "workflow";
     files.set(
       `components/${component}/workflow.ts`,
-      `import { fn, type ExpressionOrValue } from "@azure/provisioning-core";
+      `import { type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
 
 export interface ${interfaceName} {
 ${properties}

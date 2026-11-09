@@ -1,11 +1,11 @@
 ---
 name: iac-composer
-description: Create and modify Azure infrastructure as TypeScript using the Azure JavaScript provisioning libraries (@azure/provisioning-*) and iac-composer. Use when implementing Azure resource creation, dependencies, identity/access, provisioning layers, output wiring, validation, provisioning or deployment. Prefer typed resource definitions and iac-composer helpers over handwritten Bicep or ad hoc resource-creation scripts when no tool or existing IaC convention is specified. Accept resource requirements from any planner or the user; no particular planning skill or JSON contract is required. Not for architecture-advice-only, inventory, cost-only, or unrelated production diagnostics.
+description: Implement Azure infrastructure in TypeScript with @azure/provisioning-* resource definitions and iac-composer composition/provisioning APIs. Use for explicit iac-composer requests and Azure resource creation, dependencies, identity/access, output wiring, validation or deployment. Choosing this workflow requires provisioning-library-authored resources and deployment.provision, not just a defineDeployment/deployment.deploy wrapper around handwritten Bicep or Azure CLI provisioning. Bootstrap missing project dependencies; do not treat discovery failures as unsupported resources. Prefer this implementation when no tool or maintained IaC convention is specified, while honoring explicit alternatives. Accept requirements from any planner or the user; no planning skill or JSON contract is required. Not for advice-only, inventory, cost-only or unrelated production diagnostics.
 license: MIT
-compatibility: Requires Node.js 20.6 or newer. Azure execution requires Azure Developer CLI (azd) 1.30 or newer, Azure CLI, and authenticated Azure access.
+compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Azure execution requires Azure Developer CLI (azd) 1.30 or newer, Azure CLI, and authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.2"
+  version: "2.3"
 ---
 
 # Define infrastructure with iac-composer
@@ -19,11 +19,21 @@ recognition engine. Resource requirements can come from the user, repository
 evidence, any planning tool or skill, or an existing deployment. No particular
 planner, logical resource-kind vocabulary, or JSON contract is required.
 
-When an implementation method is unspecified in an opted-in workspace, prefer
-TypeScript with `@azure/provisioning-*` resource constructs and `iac-composer`
-composition and lifecycle helpers. Keep TypeScript as the source of truth;
-Bicep and azd manifests are generated artifacts. Honor explicit tool choices
-and existing compatible IaC conventions instead of migrating them implicitly.
+An explicit request to implement with iac-composer selects both TypeScript
+`@azure/provisioning-*` resource definitions and the `deployment.provision`
+pipeline. Skill activation, reference reads, a CLI invocation, or a single
+`deployment.deploy` callback around an independent provisioning script is not
+evidence of that implementation.
+
+When the method is unspecified in an opted-in workspace, prefer this workflow
+unless the project has maintained compatible IaC. Keep TypeScript as the source
+of truth; Bicep and azd manifests are generated artifacts. Honor explicit
+alternative tools and do not migrate maintained IaC without authorization.
+Handwritten artifacts from the current incomplete attempt do not establish a
+new convention that overrides the selected implementation method. If an
+explicit resumption instruction forbids replacing an incompatible captured
+implementation, surface that conflict rather than silently migrating it or
+claiming the wrapper satisfies TypeScript resource authoring.
 
 Do not apply this skill to advice-only or architecture-plan-only requests. It
 starts when direct IaC authoring, local validation, or execution is
@@ -59,7 +69,7 @@ installed provisioning-library and runtime-helper TypeScript declarations.
 
 ## Direct composition
 
-Read [the direct authoring reference](references/direct-authoring.md).
+Read [the direct authoring reference](./references/direct-authoring.md).
 Reuse existing provisioning-library code, custom compilers, and lifecycle
 helpers. Preserve the selected resource plan without redesigning it.
 
@@ -80,6 +90,12 @@ Identify:
   requirements from the supplied plan.
 
 Do not replace a working project structure with a generic template.
+Before writing resource code, follow the reference's dependency bootstrap:
+declare and install the selected project-local runtime/core/service packages,
+then resolve their actual types from the workspace. A CLI on `PATH` is not a
+project dependency. Empty provisioning library inventory, registry/access errors, and rejected
+out-of-workspace lookups are configuration problems, not proof that the provisioning library
+cannot model the requested resource.
 
 ### 2. Model ownership and order
 
@@ -102,9 +118,13 @@ inherited keys such as `toString` cannot be selected as components.
 
 - implement the provider-qualified Azure resource types and controls in the
   supplied plan;
+- use service-specific provisioning library constructs where available; when a service provisioning library/type
+  is unavailable, inspect core `Resource` before considering a narrowly
+  documented unsupported-control fallback;
 - default-export `defineDeployment(async (deployment) => { ... })`;
 - make each provisioning entrypoint export a non-empty `outputBicep` array of
-  `{ path, contents }`;
+  `{ path, contents }`, including the selected template and `.bicepparam`
+  artifacts with real parameter bindings;
 - call `deployment.provision` with an entrypoint or with a compiler plus
   `artifactsDirectory`;
 - use one `.generated/<component>` output directory per layer;
@@ -112,6 +132,15 @@ inherited keys such as `toString` cannot be selected as components.
 - wrap application and configuration side effects in `deployment.deploy`,
   commands in `deployment.run`, and ordered environment changes in
   `deployment.env`.
+
+Do not replace infrastructure authoring with handwritten Bicep, a script that
+copies Bicep into `outputBicep`, or direct `az deployment` calls hidden inside
+`deployment.deploy`. Custom compilers remain valid for existing authored
+provisioning source; they are not a way to relabel an unrelated implementation.
+Document any genuine unsupported-control exception with its installed
+package/version, missing type/property and bounded fallback. If required
+packages or matching runtime/reference assets cannot be obtained from an
+approved source, report the blocker instead of abandoning the selected method.
 
 ### 4. Handle configuration deliberately
 
@@ -148,7 +177,12 @@ Before reporting completion, verify that:
   exists;
 - resource ownership and deployment order match the requested architecture;
 - generated TypeScript and provisioning entrypoints typecheck;
-- the dry run completes and lists the expected ordered steps;
+- project manifests declare the runtime/core/resource dependencies and authored
+  imports use public package names, not machine-specific `dist` paths;
+- resource entrypoints construct provisioning library resources, render non-empty `outputBicep`,
+  and the deployment program actually calls `deployment.provision`;
+- the dry run compiles those entrypoints and emits the expected generated
+  infrastructure and ordered provision steps, not only a skipped deploy wrapper;
 - no secret or local azd state was added to version control;
 - any operation not executed because it would change Azure is called out
   clearly with the exact next command.

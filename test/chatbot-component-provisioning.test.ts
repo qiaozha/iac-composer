@@ -248,28 +248,29 @@ test("runtime configuration does not seed Cognitive Services account keys", asyn
   assert.doesNotMatch(source, /"cognitiveservices"/);
 });
 
-test("chatbot installs provisioning libraries from GitHub release assets", async () => {
+test("chatbot installs pinned provisioning libraries from npmjs", async () => {
   const packageJson = JSON.parse(
     await readFile(resolve("examples/chatbot/package.json"), "utf8"),
   ) as { dependencies?: Record<string, string> };
   const packageLock = JSON.parse(
     await readFile(resolve("examples/chatbot/package-lock.json"), "utf8"),
   ) as {
-    packages?: Record<string, { resolved?: string; integrity?: string }>;
+    packages?: Record<string, { version?: string; resolved?: string; integrity?: string }>;
   };
   const provisioningDependencies = Object.entries(
     packageJson.dependencies ?? {},
   ).filter(([name]) => name.startsWith("@azure/provisioning-"));
   assert.ok(provisioningDependencies.length > 0);
   for (const [name, value] of provisioningDependencies) {
-    const packageName = name.slice("@azure/".length);
-    const releaseUrl =
-      `https://github.com/Azure/js-provisioning-lib/releases/download/` +
-      `%40azure/${packageName}%400.1.0/azure-${packageName}-0.1.0.tgz`;
-    assert.equal(value, releaseUrl, name);
+    assert.match(value, /^1\.0\.0-beta\.\d+$/, name);
     const lockedPackage = packageLock.packages?.[`node_modules/${name}`];
-    assert.equal(lockedPackage?.resolved, releaseUrl, name);
+    assert.equal(lockedPackage?.version, value, name);
+    assert.ok(lockedPackage?.resolved?.startsWith(`https://registry.npmjs.org/${name}/-/`), name);
     assert.match(lockedPackage?.integrity ?? "", /^sha512-/, name);
+  }
+  for (const obsolete of ["bicep", "serialization", "serialization-ast"]) {
+    assert.equal(Object.hasOwn(packageJson.dependencies ?? {}, `@azure/provisioning-${obsolete}`), false);
+    assert.equal(Object.hasOwn(packageLock.packages ?? {}, `node_modules/@azure/provisioning-${obsolete}`), false);
   }
 });
 

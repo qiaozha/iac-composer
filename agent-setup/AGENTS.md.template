@@ -7,7 +7,7 @@ compatible Terraform, Bicep, azd, or other IaC conventions. Do not migrate them
 implicitly.
 
 For requests to implement Azure resource creation, updates or deployment
-without an explicit implementation method:
+with iac-composer explicitly, or without an explicit implementation method:
 - Use the installed `iac-composer` skill. Without skill support, use
   `iac_composer_get_context`, or read
   [.agents/skills/iac-composer/SKILL.md](.agents/skills/iac-composer/SKILL.md).
@@ -18,6 +18,11 @@ without an explicit implementation method:
 - Author `@azure/provisioning-*` Stack/resource definitions and relationships
   in TypeScript. Use iac-composer composition/helpers to validate, provision and
   deploy; Bicep is generated output, not the default handwritten source.
+- Establish approved project-local dependencies and resolve references inside
+  the workspace. A missing package or failed lookup does not prove a resource
+  is unsupported. Prefer core `Resource` for a missing service provisioning library/type.
+- Verify real resource entrypoints and `deployment.provision` steps. A single
+  `deployment.deploy` wrapper around a raw Bicep/CLI lifecycle is not equivalent.
 - Resolve architecture gaps separately using an appropriate planning workflow,
   then resume implementation. Advice-only and plan-only requests must not
   create files. Cloud execution requires explicit authorization.

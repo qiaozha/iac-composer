@@ -1,18 +1,10 @@
-import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepParameterFile,
-  renderBicepFiles,
-} from "@azure/provisioning-bicep";
-import {
-  fn,
-  Stack,
-  type ExpressionOrValue,
-} from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
+import { bicepRef, createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
-import { ApplicationInsightsComponent } from "@azure/provisioning-applicationinsights";
-import { AppServicePlan, Site } from "@azure/provisioning-appservice";
+import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
+import { AppServicePlan, Site } from "../../runtime/provisioning.js";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 
@@ -95,9 +87,9 @@ const appInsights = new ApplicationInsightsComponent(stack, {
   location,
   kind: "web",
   properties: {
-    Application_Type: "web",
-    RetentionInDays: 90,
-    WorkspaceResourceId: workspace.id as any,
+    applicationType: "web",
+    retentionInDays: 90,
+    workspaceResourceId: workspace.id as any,
   },
 });
 
@@ -144,11 +136,11 @@ const site = new Site(stack, {
         { name: "APP_CONFIG_NAME", value: appConfigName },
         {
           name: "APPINSIGHTS_INSTRUMENTATIONKEY",
-          value: appInsights.properties.InstrumentationKey as any,
+          value: appInsights.properties.instrumentationKey as any,
         },
         {
           name: "APPLICATIONINSIGHTS_CONNECTION_STRING",
-          value: appInsights.properties.ConnectionString as any,
+          value: appInsights.properties.connectionString as any,
         },
         {
           name: "AzureWebJobsStorage__accountName",
@@ -189,7 +181,7 @@ stack.outputs.add("FUNCTION_APP_NAME", "string", site.name);
 const env = bicepRef<string>("env");
 const deployedFunctionImage = bicepRef<string>("deployedFunctionImage");
 const registryEndpoint = bicepRef<string>("registryEndpoint");
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   variables: {
     env: fn.readEnvironmentVariable("AZURE_ENV_NAME", "dev"),
@@ -237,7 +229,7 @@ const parameterFile = createBicepParameterFile("main.bicepparam", {
 });
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Function App provisioning produced no Bicep entry file.");
 }

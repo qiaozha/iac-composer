@@ -1,31 +1,14 @@
-import {
-  createBicepParameterFile,
-  renderBicepParameterFile,
-  renderBicepFiles,
-} from "@azure/provisioning-bicep";
-import {
-  fn,
-  Loop,
-  Stack,
-  type Expression,
-  type ExpressionOrValue,
-} from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
-import { UserAssignedIdentity } from "@azure/provisioning-managed-identity";
+import { createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { Stack, type Expression, type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
+import { UserAssignedIdentity } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
-import { ApplicationInsightsComponent } from "@azure/provisioning-applicationinsights";
-import {
-  Account,
-  AccountConnection,
-  Deployment,
-  Project,
-  ProjectConnection,
-} from "@azure/provisioning-cognitiveservices";
-import { Registry } from "@azure/provisioning-container-registry";
-import {
-  grantRole,
-  RoleAssignment,
-} from "@azure/provisioning-authorization";
+import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
+import { Account, CognitiveServicesConnection as AccountConnection, Deployment, Project, CognitiveServicesProjectConnection as ProjectConnection, types } from "@azure/provisioning-cognitiveservices";
+import { bicepRef, loopResource } from "../../runtime/provisioning.js";
+import { Registry } from "@azure/provisioning-containerregistry";
+import { grantRole, RoleAssignment } from "../../runtime/provisioning.js";
 
 const cognitiveServicesOpenAIUserRoleId =
   "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd";
@@ -34,15 +17,6 @@ const acrPullRoleId = "7f951dda-4ed3-4680-a7ca-43fe172d538d";
 
 AccountConnection.apiVersion = "2026-05-15-preview";
 ProjectConnection.apiVersion = "2026-05-15-preview";
-
-interface ModelDeploymentConfig {
-  readonly name: string;
-  readonly properties: Record<string, unknown>;
-  readonly sku: {
-    readonly name: string;
-    readonly capacity: number;
-  };
-}
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 
@@ -128,11 +102,11 @@ const appInsights = new ApplicationInsightsComponent(stack, {
   location,
   kind: "web",
   properties: {
-    Application_Type: "web",
-    Flow_Type: "Bluefield",
-    Request_Source: "rest",
-    RetentionInDays: 90,
-    WorkspaceResourceId: workspace.id as any,
+    applicationType: "web",
+    flowType: "Bluefield",
+    requestSource: "rest",
+    retentionInDays: 90,
+    workspaceResourceId: workspace.id as any,
   },
 });
 
@@ -231,16 +205,18 @@ const modelDeploymentConfigs = stack.variables.add("modelDeploymentConfigs", [
     },
     sku: { name: "GlobalStandard", capacity: 1 },
   },
-]) as Expression<ModelDeploymentConfig[]>;
-const modelDeploymentsLoop = new Loop(modelDeploymentConfigs, {
-  itemVariable: "deployment",
-  batchSize: 1,
-});
-const modelDeployments = Deployment.fromLoop(modelDeploymentsLoop, account, {
-  name: modelDeploymentsLoop.item.name,
-  properties: modelDeploymentsLoop.item.properties as any,
-  sku: modelDeploymentsLoop.item.sku,
-});
+]);
+const modelDeployments = loopResource(
+  stack,
+  new Deployment(account, {
+    name: bicepRef("deployment.name"),
+    properties: bicepRef<types.DeploymentProperties>("deployment.properties"),
+    sku: bicepRef<types.Sku>("deployment.sku"),
+  }),
+  modelDeploymentConfigs,
+  "deployment",
+  1,
+);
 
 new AccountConnection(
   account,
@@ -302,7 +278,7 @@ new ProjectConnection(project, {
     category: "AppInsights",
     target: appInsights.id as any,
     credentials: {
-      key: appInsights.properties.ConnectionString as any,
+      key: appInsights.properties.connectionString as any,
     },
     isSharedToAll: true,
     metadata: {
@@ -386,7 +362,7 @@ stack.outputs.add(
 stack.outputs.add(
   "APPLICATIONINSIGHTS_CONNECTION_STRING",
   "string",
-  appInsights.properties.ConnectionString as any,
+  appInsights.properties.connectionString as any,
 );
 stack.outputs.add("BOT_IDENTITY_NAME", "string", botIdentity.name);
 stack.outputs.add(
@@ -401,7 +377,7 @@ stack.outputs.add(
   botIdentity.properties.tenantId as any,
 );
 
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
     location: fn.readEnvironmentVariable(
@@ -449,7 +425,7 @@ const parameterFile = createBicepParameterFile("main.bicepparam", {
 });
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Agent provisioning produced no Bicep entry file.");
 }

@@ -71,15 +71,23 @@ async function installedPackage(packageName: string, project: string) {
       }, { cause });
     }
     root = dirname(entry);
+    let matchingRoot: string | undefined;
     while (true) {
       try {
         const metadata = await manifest(resolve(root, "package.json"));
-        if (metadata.name === packageName) break;
+        if (metadata.name === packageName) {
+          matchingRoot = root;
+          if (declarationTypes(metadata)) break;
+        }
       } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
       }
       const parent = dirname(root);
       if (parent === root) {
+        if (matchingRoot) {
+          root = matchingRoot;
+          break;
+        }
         throw referenceError("PACKAGE_METADATA_INVALID", packageName, "Install a provisioning package with matching package metadata.");
       }
       root = parent;
@@ -87,14 +95,18 @@ async function installedPackage(packageName: string, project: string) {
   }
   root = await realpath(root);
   const metadata = await manifest(resolve(root, "package.json"));
-  const types = typeof metadata.types === "string" ? metadata.types
-    : typeof metadata.typings === "string" ? metadata.typings
-    : exportedTypes(isObject(metadata.exports) ? metadata.exports["."] : metadata.exports);
+  const types = declarationTypes(metadata);
   if (typeof metadata.version !== "string" || !types) {
     throw referenceError("SDK_DECLARATION_UNAVAILABLE", packageName, "Install a library version that ships TypeScript declarations.");
   }
   const entrypoint = await declarationPath(root, types);
   return { root, version: metadata.version, entrypoint };
+}
+
+function declarationTypes(metadata: Record<string, unknown>): string | undefined {
+  return typeof metadata.types === "string" ? metadata.types
+    : typeof metadata.typings === "string" ? metadata.typings
+    : exportedTypes(isObject(metadata.exports) ? metadata.exports["."] : metadata.exports);
 }
 
 function exportedTypes(value: unknown): string | undefined {
@@ -238,7 +250,7 @@ export async function getTypeScriptReference(options: {
       options.symbol,
       truncated
         ? "Narrow lookup with a declaration file from the selected library."
-        : "Check the installed library/version and query an exported type. Do not invent SDK properties or silently substitute another infrastructure authoring method.",
+        : "Check the installed library/version and query an exported type. Do not invent provisioning library properties or silently substitute another infrastructure authoring method.",
     );
   }
   return {

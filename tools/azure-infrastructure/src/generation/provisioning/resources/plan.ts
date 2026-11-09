@@ -76,7 +76,7 @@ function outputExpression(
       appConfigurationResourceId: `${base}Store.id`,
     },
     "application-monitoring": {
-      applicationInsightsConnectionString: `${base}Insights.properties.ConnectionString as any`,
+      applicationInsightsConnectionString: `${base}Insights.properties.connectionString as any`,
       applicationInsightsName: `${base}Insights.name`,
     },
     "model-deployment": {

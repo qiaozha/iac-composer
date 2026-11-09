@@ -326,8 +326,8 @@ const ${base}Insights = new ApplicationInsightsComponent(stack, {
   location,
   kind: "web",
   properties: {
-    Application_Type: "web",
-    WorkspaceResourceId: ${base}Workspace.id as any,
+    applicationType: "web",
+    workspaceResourceId: ${base}Workspace.id as any,
   },
 });
 
@@ -343,7 +343,7 @@ ${foundryProjects.map((project) => {
     authType: "ApiKey",
     isSharedToAll: true,
     credentials: {
-      key: ${base}Insights.properties.ConnectionString as any,
+      key: ${base}Insights.properties.connectionString as any,
     },
     metadata: {
       ApiType: "Azure",

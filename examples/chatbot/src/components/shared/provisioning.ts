@@ -1,20 +1,13 @@
-import {
-  createBicepParameterFile,
-  renderBicepParameterFile,
-  renderBicepFiles,
-} from "@azure/provisioning-bicep";
-import {
-  fn,
-  Stack,
-  type ExpressionOrValue,
-} from "@azure/provisioning-core";
-import { serialize } from "@azure/provisioning-serialization";
-import { UserAssignedIdentity } from "@azure/provisioning-managed-identity";
-import { ActionGroup } from "@azure/provisioning-monitor";
+import { createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
+import { serialize } from "../../runtime/provisioning.js";
+import { UserAssignedIdentity } from "../../runtime/provisioning.js";
+import { ActionGroup } from "../../runtime/provisioning.js";
 import { KeyVault } from "@azure/provisioning-keyvault";
-import { ConfigurationStore } from "@azure/provisioning-appconfiguration";
+import { ConfigurationStore } from "../../runtime/provisioning.js";
 import { SearchService } from "@azure/provisioning-search";
-import { Registry } from "@azure/provisioning-container-registry";
+import { Registry } from "@azure/provisioning-containerregistry";
 import {
   BlobService,
   Container,
@@ -28,11 +21,7 @@ import {
   SqlDatabase,
   SqlRoleAssignment,
 } from "@azure/provisioning-cosmosdb";
-import {
-  grantRole,
-  Role,
-  RoleAssignment,
-} from "@azure/provisioning-authorization";
+import { grantRole, Role, RoleAssignment } from "../../runtime/provisioning.js";
 
 const storageBlobDataOwnerRoleId = "b7e6dc6d-f1e8-4753-8033-0f276bb0955b";
 const appConfigDataReaderRoleId = "516239f1-63e1-4d78-a4de-a74fb236a071";
@@ -577,7 +566,7 @@ for (const [name, value] of outputs) {
   stack.outputs.add(name, "string", value);
 }
 
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
@@ -614,7 +603,7 @@ const parameterFile = createBicepParameterFile("main.bicepparam", {
 });
 
 export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles(outputJson);
+const [renderedStack] = renderBicepFiles([stack]);
 if (renderedStack === undefined) {
   throw new Error("Shared provisioning produced no Bicep entry file.");
 }

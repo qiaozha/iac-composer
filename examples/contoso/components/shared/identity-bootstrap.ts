@@ -1,9 +1,6 @@
-import {
-  bicepRef,
-  createBicepParameterFile,
-  renderBicepParameterFile,
-} from "@azure/provisioning-bicep";
-import { fn, Stack } from "@azure/provisioning-core";
+import { bicepRef, createBicepParameterFile, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { Stack } from "@azure/provisioning-core";
+import { fn } from "../../runtime/provisioning.js";
 
 import { renderGraphStack } from "./graph-provisioning.js";
 
@@ -38,7 +35,7 @@ const rendered = renderGraphStack(stack, [
     body: { appId: backendComputeApplicationAppId },
   },
 ]);
-const parameterFile = createBicepParameterFile("main.bicepparam", {
+const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
   using: "./main.bicep",
   parameters: {
     backendComputeApplicationUniqueName: fn.readEnvironmentVariable("DEPLOY_ENTRA_BACKENDCOMPUTE_APPLICATION_UNIQUE_NAME"),

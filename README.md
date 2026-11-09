@@ -117,7 +117,7 @@ gh skill install qiaozha/iac-composer iac-composer \
 This uses the common `.agents/skills` project location supported by Copilot and
 Codex. The same runtime package owns the `iac-composer-mcp` binary and its
 read-only `iac_composer_get_context` and `iac_composer_get_reference` tools.
-They expose SDK Stack/resource authoring, actual installed TypeScript
+They expose provisioning-library Stack/resource authoring, actual installed TypeScript
 declarations, lifecycle helpers and validation/provision/deploy capabilities.
 The agent authors TypeScript directly and uses the existing runtime CLI for
 trusted preview and explicitly authorized execution.
@@ -161,8 +161,8 @@ than guessing resource properties or management-SDK request shapes.
 
 Library callers can use `describeRuntimeCapabilities(topic)`,
 `getIacComposerContext(topic)` and `getTypeScriptReference(options)` without
-spawning a CLI. SDK lookup requires a workspace and reads metadata/declarations
-only; it does not import SDK code, install libraries or provision resources.
+spawning a CLI. Provisioning-library lookup requires a workspace and reads metadata/declarations
+only; it does not import library code, install libraries or provision resources.
 
 Keep human logs and arbitrary program output separate from machine results:
 
@@ -257,11 +257,12 @@ component while keeping their default full deployment unchanged.
 
 Infrastructure definitions use the Azure JavaScript provisioning libraries:
 
-- `@azure/provisioning-core` provides stacks, parameters, outputs, and expressions.
+- `@azure/provisioning-core` provides stacks, parameters, outputs, expressions,
+  serialization/AST support, and Bicep rendering. Import serialization from
+  `@azure/provisioning-core/serialization` and rendering from
+  `@azure/provisioning-core/internal`.
 - Resource-specific packages such as `@azure/provisioning-storage` and
-  `@azure/provisioning-appservice` provide Azure resource definitions.
-- `@azure/provisioning-serialization` and `@azure/provisioning-bicep` serialize
-  stacks and render deployment artifacts.
+  `@azure/provisioning-containerregistry` provide Azure resource definitions.
 
 Install the provisioning packages your code imports in your own project. Keep
 the TypeScript definitions as the source of truth; Bicep and parameter files
@@ -304,9 +305,16 @@ calls first appear. Other output directories retain a standalone azd project.
 
 ## Chatbot integration
 
-The chatbot is its own npm package. Its provisioning dependencies are pinned to
-package-specific GitHub release assets from
-`Azure/js-provisioning-lib` in `examples/chatbot/package.json`.
+The chatbot is its own npm package and requires Node.js 22 or newer. Its
+provisioning dependencies are pinned to public npm beta releases in
+[examples/chatbot/package.json](examples/chatbot/package.json). Application
+Insights uses `@azure/provisioning-appinsights` and Container Registry uses
+`@azure/provisioning-containerregistry`.
+There are no separate serialization, serialization-AST, or Bicep packages.
+Until all service provisioning libraries are published, the example's
+[provisioning helper](examples/chatbot/src/runtime/provisioning.ts) defines
+unavailable resources with typed core `Resource` subclasses and preserves
+parameter-file bindings, Graph extension resources, and sequential model updates.
 Install them with:
 
 ```bash

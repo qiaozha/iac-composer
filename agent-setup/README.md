@@ -30,10 +30,11 @@ The standalone local MCP binary is `iac-composer-mcp`, implemented in
 `tools/azure-infrastructure`, installing its skill, and preparing its contracts
 are **not** prerequisites.
 
-The consumer project declares the provisioning libraries it actually imports:
-`@azure/provisioning-core`, `@azure/provisioning-serialization`,
-`@azure/provisioning-bicep`, and resource-specific packages such as
-`@azure/provisioning-storage`. Inspect existing manifests/versions first; do
+The consumer project declares `@azure/provisioning-core` and resource-specific
+packages it actually imports, such as `@azure/provisioning-storage`.
+Public npm provisioning libraries require Node.js 22 or newer. Core bundles
+serialization, AST support, and Bicep rendering; use its `/serialization` and
+`/internal` exports rather than separate packages. Inspect existing manifests/versions first; do
 not silently install an unrelated latest tool or a management SDK.
 
 ## 2. Install the implementation skill
@@ -59,7 +60,7 @@ path-shaped selectors in verification. Do not use `--force` without review.
 
 Merge the [AGENTS routing block](AGENTS.md.template) into the consumer-root
 `AGENTS.md`. Do not replace an existing instruction file. It prefers TypeScript
-SDK resource definitions and iac-composer when no implementation method or
+provisioning library resource definitions and iac-composer when no implementation method or
 existing convention applies, not when the user explicitly chose Terraform,
 Bicep, azd, REST/management SDKs or another approach.
 
@@ -110,7 +111,7 @@ Read-only implementation discovery; `topic` defaults to `start`.
 
 - `start`: TypeScript resource authoring, planner-neutral requirements,
   composition, validation, provision/deploy workflow and effects.
-- `authoring`: canonical SDK Stack/resource/outputBicep and deployment examples.
+- `authoring`: canonical provisioning library Stack/resource/outputBicep and deployment examples.
 - `sdk`: provisioning libraries declared by the Node project and installed
   version/availability. Optional `projectDirectory` selects a project inside
   the workspace, such as `deployment`.
@@ -123,7 +124,7 @@ No Azure service catalog or planner-specific schema is required or loaded.
 
 ### `iac_composer_get_reference`
 
-Read actual TypeScript declarations without importing/executing SDK code:
+Read actual TypeScript declarations without importing/executing provisioning library code:
 
 ```json
 {
@@ -147,18 +148,18 @@ Missing packages/symbols and invalid paths fail explicitly. Reads are limited
 to declaration files inside the resolved package; symlinks cannot escape it.
 Scan limits are 256 files, 2 MiB per file and 8 MiB total; at most three bounded
 excerpts and twenty file names are returned. Narrow lookup when truncated.
-These are installed SDK types, not a complete ARM/provider validation schema.
+These are installed provisioning library types, not a complete ARM/provider validation schema.
 
 Both tools return versioned structured content and diagnostics, with
 `isError: true` and `status: "failed"` on handled errors. Stdout is protocol-only.
-There is no code generation contract, automatic SDK installation, telemetry
+There is no code generation contract, automatic provisioning library installation, telemetry
 upload, or cloud-execution operation in this MCP server.
 
 ## Author, validate and execute through the runtime
 
 The agent writes TypeScript provisioning source, exports rendered `outputBicep`,
 and composes it with `defineDeployment`, `deployment.provision`, returned
-outputs, and explicit lifecycle helpers. Resource relationships belong in SDK
+outputs, and explicit lifecycle helpers. Resource relationships belong in provisioning library
 references; persistent resources should not be replaced by ad hoc CLI scripts.
 
 After project typechecking and appropriate Bicep checks, use the existing CLI:
@@ -195,7 +196,7 @@ planner/generator is wanted. Do not delete existing consumer files blindly.
 
 Use the [evaluation cases and recording protocol](evaluation/README.md).
 The key trial installs only iac-composer, supplies an Azure resource plan from
-another source, and checks for TypeScript SDK resource definitions, helper use
+another source, and checks for TypeScript provisioning library resource definitions, helper use
 and runtime provisioning/preview without a required recognition skill or JSON
 contract.
 

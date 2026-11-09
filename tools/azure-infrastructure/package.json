@@ -16,7 +16,7 @@
   "files": [
     "dist",
     "src/runtime/services",
-    "vendor",
+    "src/runtime/provisioning.ts",
     ".github/skills",
     "docs"
   ],
@@ -29,6 +29,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@azure/provisioning-core": "1.0.0-beta.2",
     "@modelcontextprotocol/server": "2.4.0",
     "iac-composer": "file:../..",
     "yaml": "^2.9.1",
@@ -41,7 +42,7 @@
     "typescript": "^6.0.0"
   },
   "engines": {
-    "node": ">=20.6"
+    "node": ">=22.0.0"
   },
   "license": "MIT"
 }

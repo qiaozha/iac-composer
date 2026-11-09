@@ -2,6 +2,29 @@
   "schemaVersion": "1.0",
   "cases": [
     {
+      "id": "explicit-composer",
+      "selectionMode": "explicit",
+      "prompt": "Use the iac-composer skill to define this application's Azure infrastructure and run its deployment.",
+      "fixture": "Existing application and complete Azure resource requirements; approved project-local runtime/core/service packages, fake cloud executables and no cloud credentials.",
+      "expectedRoute": "typescript-implementation",
+      "mayGenerate": true
+    },
+    {
+      "id": "explicit-composer-bootstrap",
+      "selectionMode": "explicit",
+      "prompt": "Use iac-composer and the provisioning libraries to implement this complete Azure resource plan.",
+      "fixture": "Runtime CLI available but empty workspace provisioning library inventory; approved built runtime artifact and service-package sources are supplied. Require manifest/install repair and workspace-scoped lookups, not host dist imports or a raw-Bicep wrapper.",
+      "expectedRoute": "typescript-implementation",
+      "mayGenerate": true
+    },
+    {
+      "id": "missing-service-library",
+      "prompt": "Implement this Azure resource plan without changing its selected services.",
+      "fixture": "Approved core provisioning library installed; a requested service has no published dedicated resource class. Verify public core Resource support before external fallback and retain render/provision ordering.",
+      "expectedRoute": "typescript-implementation",
+      "mayGenerate": true
+    },
+    {
       "id": "generic-api",
       "prompt": "Create Azure infrastructure for this API with durable document storage.",
       "fixture": "Existing API and Azure resource requirements supplied by another planning skill; only the runtime skill/MCP is installed.",
