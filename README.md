@@ -257,10 +257,7 @@ component while keeping their default full deployment unchanged.
 
 Infrastructure definitions use the Azure JavaScript provisioning libraries:
 
-- `@azure/provisioning-core` provides stacks, parameters, outputs, expressions,
-  serialization/AST support, and Bicep rendering. Import serialization from
-  `@azure/provisioning-core/serialization` and rendering from
-  `@azure/provisioning-core/internal`.
+- `@azure/provisioning-core` provides stacks, parameters, outputs, and expressions.
 - Resource-specific packages such as `@azure/provisioning-storage` and
   `@azure/provisioning-containerregistry` provide Azure resource definitions.
 
@@ -268,10 +265,45 @@ Install the provisioning packages your code imports in your own project. Keep
 the TypeScript definitions as the source of truth; Bicep and parameter files
 are build artifacts.
 
-A provisioning entrypoint must export a non-empty `outputBicep` array of
-`{ path, contents }` objects when passed through `entrypoint`. Libraries that
-require their own build process can instead provide a compiler command and its
-artifact directory:
+Default-export a stack definition from a provisioning entrypoint. The runtime
+loads the core library from that entrypoint's project, compiles the stack,
+preserves its complete module layout, and creates the parameter file internally:
+
+```ts
+import { Stack } from "@azure/provisioning-core";
+import { StorageAccount } from "@azure/provisioning-storage";
+import { defineProvisioning } from "iac-composer";
+
+const stack = new Stack("main", { targetScope: "resourceGroup" });
+const location = stack.parameters.add("location", "string");
+const storage = new StorageAccount(stack, {
+  name: "applicationstorage",
+  location,
+  kind: "StorageV2",
+  sku: { name: "Standard_LRS" },
+});
+stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
+export default defineProvisioning({ stack });
+```
+
+Call `deployment.provision("storage", { entrypoint: "./infra.ts",
+outputDirectory: ".generated/storage", parameters: { location: "eastus" } })`.
+Required parameters get runtime-managed environment bindings; optional stack
+defaults are retained unless overridden. The definition can supply
+`parameters` and `parameterVariables` for existing environment expressions,
+and `graphResources` for Graph declarations. The runtime's `loopResource`
+helper preserves sequential updates without application-owned rendering.
+Prefer `createParameterVariables(stack, values)` for inferred variable handles
+and `createGraphResource(stack, definition)` for Graph property and dependency
+handles; both register their declarations automatically. `loopResource` accepts
+a collection and `{ itemVariable, batchSize, create: item => resource }` so the
+callback receives a typed item rather than a handwritten reference path.
+Provisioning libraries are an optional peer dependency: install the selected
+compatible core/service versions in the resource project. Plain deployment
+programs and legacy rendered-file inputs do not load core.
+
+Legacy entrypoints exporting `outputBicep` arrays remain supported. Libraries
+with their own build process can still provide a compiler and artifact directory:
 
 ```ts
 await deployment.provision("resources", {
@@ -313,8 +345,9 @@ Insights uses `@azure/provisioning-appinsights` and Container Registry uses
 There are no separate serialization, serialization-AST, or Bicep packages.
 Until all service provisioning libraries are published, the example's
 [provisioning helper](examples/chatbot/src/runtime/provisioning.ts) defines
-unavailable resources with typed core `Resource` subclasses and preserves
-parameter-file bindings, Graph extension resources, and sequential model updates.
+unavailable resources with typed core `Resource` subclasses. Entry modules
+default-export `defineProvisioning` definitions; iac-composer handles compilation,
+parameter bindings, Graph extension resources, and sequential model updates.
 Install them with:
 
 ```bash

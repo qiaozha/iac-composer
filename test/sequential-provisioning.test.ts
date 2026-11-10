@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -15,6 +15,7 @@ test("dry run generates layered Bicep in one azd project", async () => {
     environment: "dev",
     log: (message) => messages.push(message),
   });
+
   await mkdir(resolve(outputRoot, ".azure/dev"), { recursive: true });
   await writeFile(resolve(outputRoot, ".azure/dev/config.json"), "{}\n");
   await writeFile(resolve(outputRoot, ".iac-compose-project.json"), "{}\n");
@@ -141,4 +142,43 @@ test("dry run generates layered Bicep in one azd project", async () => {
     ),
     generatedFiles,
   );
+});
+
+test("service module contexts share ordered layers and preserve nested Bicep modules", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "iac-composer-service-modules-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
+  const outputRoot = join(root, ".generated");
+  for (const service of ["shared", "storage", "search"]) {
+    const directory = join(root, "services", service);
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "infra.ts"), `export const outputBicep = [
+      { path: "templates/main.bicep", contents: "targetScope = 'resourceGroup'\\nmodule service './modules/service.bicep' = { name: '${service}' }\\n" },
+      { path: "templates/modules/service.bicep", contents: "targetScope = 'resourceGroup'\\noutput serviceName string = '${service}'\\n" },
+      { path: "templates/main.bicepparam", contents: "using './main.bicep'\\n" }
+    ];`);
+    const context = deployment.inDirectory(directory);
+    await context.provision(`${service} resources`, {
+      layer: { entrypoint: "infra.ts", outputDirectory: join(outputRoot, service) },
+      templateFile: "templates/main.bicep",
+      parametersFile: "templates/main.bicepparam",
+    });
+    await context.deploy(`${service} initialization`, () => {
+      throw new Error("Dry runs must not initialize service data.");
+    });
+  }
+  const manifest = JSON.parse(await readFile(join(outputRoot, "azure.yaml"), "utf8"));
+  assert.deepEqual(manifest.infra.layers, [
+    { name: "shared", path: "./shared", module: "templates/main" },
+    { name: "storage", path: "./storage", module: "templates/main", dependsOn: ["shared"] },
+    { name: "search", path: "./search", module: "templates/main", dependsOn: ["storage"] },
+  ]);
+  for (const service of ["shared", "storage", "search"]) {
+    assert.match(await readFile(join(outputRoot, service, "templates/main.bicep"), "utf8"),
+      /module service '\.\/modules\/service\.bicep'/);
+    assert.match(await readFile(join(outputRoot, service, "templates/modules/service.bicep"), "utf8"),
+      new RegExp(`output serviceName string = '${service}'`));
+  }
+  const ownership = JSON.parse(await readFile(join(outputRoot, ".iac-composer-generated.json"), "utf8"));
+  assert.equal(ownership.length, 9);
 });

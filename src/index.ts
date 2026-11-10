@@ -14,7 +14,23 @@ import { getAzdProject, iacComposerAzdTemplate } from "./azd.js";
 import { importTypeScript } from "./typescript-loader.js";
 import { IacComposerError } from "./diagnostics.js";
 import type { DeploymentEvent, StepEvent } from "./report.js";
+import { isProvisioningDefinition, renderProvisioningDefinition } from "./provisioning.js";
 
+export {
+  defineProvisioning,
+  createParameterVariables,
+  createGraphResource,
+  loopResource,
+  type ParameterVariables,
+  type GraphResourceHandle,
+  type GraphIdentityHandle,
+  type GraphResourceInput,
+  type GraphResourceType,
+  type ResourceLoopOptions,
+  type ProvisioningSource,
+  type ProvisioningDefinition,
+  type GraphResourceDefinition,
+} from "./provisioning.js";
 export { IacComposerError, type Diagnostic } from "./diagnostics.js";
 export type { DeploymentEvent, StepEvent, ArtifactEvent, ExecutionReport } from "./report.js";
 export { describe as describeRuntimeCapabilities, type DiscoveryTopic } from "./discovery.js";
@@ -147,7 +163,7 @@ export class Deployment {
   readonly dryRun: boolean;
 
   readonly #log: (message: string) => void;
-  readonly #layersByProject = new Map<string, string[]>();
+  #layersByProject = new Map<string, string[]>();
   #events: { nextId: number; onEvent?: (event: DeploymentEvent) => void };
 
   constructor(options: DeploymentOptions = {}) {
@@ -168,6 +184,7 @@ export class Deployment {
       log: this.#log,
     });
     child.#events = this.#events;
+    child.#layersByProject = this.#layersByProject;
     return child;
   }
 
@@ -208,6 +225,7 @@ export class Deployment {
           outputDirectory,
           azdProjectDirectory,
           requiredFiles,
+          options.parameters,
         );
       } else {
         throw new Error(
@@ -233,7 +251,10 @@ export class Deployment {
           : {}),
         ...options.environmentValues,
       };
-      const module = basename(templateFile, extname(templateFile));
+      const module = relative(
+        outputDirectory,
+        resolve(dirname(templateFile), basename(templateFile, extname(templateFile))),
+      ).split(sep).join("/");
       const dependsOn = layer
         ? this.#inferLayerDependencies(azdProjectDirectory, layer)
         : [];
@@ -525,6 +546,7 @@ export async function compileProvisioning(
   outputDirectory: string,
   generatedFilesRoot = outputDirectory,
   requiredFiles: readonly string[] = [],
+  parameters: Readonly<Record<string, string | number | boolean>> = {},
 ): Promise<void> {
   const resolvedEntrypoint = resolve(entrypoint);
   let module: Record<string, unknown>;
@@ -542,7 +564,29 @@ export async function compileProvisioning(
       repair: "Check the entrypoint path, syntax, package module type, and provisioning library dependencies; run the project's typecheck.",
     }, { cause: error, message: error instanceof Error ? error.message : String(error) });
   }
-  const files = resolveRenderedFiles(module, resolvedEntrypoint);
+  const definition = module.provisioning ?? module.default;
+  if (isProvisioningDefinition(definition) && module.outputBicep !== undefined) {
+    throw new IacComposerError({
+      code: "PROVISIONING_SOURCE_CONFLICT", category: "configuration",
+      message: "A provisioning module cannot export both a stack definition and rendered files.",
+      target: resolvedEntrypoint,
+      repair: "Use defineProvisioning or the legacy rendered-file export, not both.",
+    });
+  }
+  let files: readonly RenderedFile[];
+  try {
+    files = isProvisioningDefinition(definition)
+      ? await renderProvisioningDefinition(definition, resolvedEntrypoint, requiredFiles, parameters)
+      : resolveRenderedFiles(module, resolvedEntrypoint);
+  } catch (cause) {
+    if (cause instanceof IacComposerError) throw cause;
+    throw new IacComposerError({
+      code: "PROVISIONING_COMPILE_FAILED", category: "compilation",
+      message: `Could not compile provisioning entrypoint '${resolvedEntrypoint}'.`,
+      target: resolvedEntrypoint,
+      repair: "Check the authored resource definitions and installed provisioning-core compatibility.",
+    }, { cause, message: cause instanceof Error ? cause.message : String(cause) });
+  }
 
   await installRenderedFiles(outputDirectory, files, generatedFilesRoot, requiredFiles);
 }
@@ -837,7 +881,7 @@ async function collectBicepEnvironmentValues(
     const escapedName = parameterName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const binding = new RegExp(
       `^\\s*param\\s+${escapedName}(?:\\s+[^=\\r\\n]+)?\\s*=\\s*` +
-        "readEnvironmentVariable\\(\\s*'([^']+)'",
+        "(?:(?:bool|int|json)\\(\\s*)?readEnvironmentVariable\\(\\s*'([^']+)'",
       "m",
     ).exec(source);
     const environmentName = binding?.[1];
@@ -845,10 +889,10 @@ async function collectBicepEnvironmentValues(
       throw new IacComposerError({
         code: "PARAMETER_BINDING_REQUIRED",
         category: "configuration",
-        message: `Bicep parameter '${parameterName}' must bind directly to readEnvironmentVariable() for an azd provision override.`,
+        message: `Parameter '${parameterName}' must bind to readEnvironmentVariable(), optionally converted with bool/int/json, for a provisioning override.`,
         target: parametersFile,
         property: `parameters.${parameterName}`,
-        repair: "Bind this parameter directly to readEnvironmentVariable() in the authored parameter source, or remove the override.",
+        repair: "Use a stack definition's generated binding, an environment binding with an optional bool/int/json conversion, or remove the override.",
       });
     }
     values[environmentName] = String(parameterValue);

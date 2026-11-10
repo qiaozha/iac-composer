@@ -1,7 +1,7 @@
-import { bicepRef, createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { createParameterVariables, defineProvisioning } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { Workspace } from "@azure/provisioning-operationalinsights";
 import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
 import { AppServicePlan, Site, SiteConfigAuthsettingsV2 } from "../../runtime/provisioning.js";
@@ -268,12 +268,9 @@ stack.outputs.add(
 );
 stack.outputs.add("AGENT_SERVER_SITE_NAME", "string", site.name);
 
-const env = bicepRef<string>("env");
-const deployedAgentServerImage = bicepRef<string>("deployedAgentServerImage");
-const registryEndpoint = bicepRef<string>("registryEndpoint");
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
-  variables: {
+const { env, deployedAgentServerImage, registryEndpoint } = createParameterVariables(
+  stack,
+  {
     env: fn.readEnvironmentVariable("AZURE_ENV_NAME", "dev"),
     deployedAgentServerImage: fn.readEnvironmentVariable(
       "SERVICE_AGENT_SERVER_IMAGE_NAME",
@@ -283,6 +280,9 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
       "AZURE_CONTAINER_REGISTRY_ENDPOINT",
     ),
   },
+);
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
     containerImage: fn.cond(
@@ -331,13 +331,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Agent-server provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

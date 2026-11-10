@@ -1,8 +1,6 @@
-import { bicepRef, createBicepParameterFile, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { createGraphResource, defineProvisioning } from "iac-composer";
 import { Stack } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-
-import { renderGraphStack } from "./graph-provisioning.js";
 
 const stack = new Stack("main", { targetScope: "subscription" });
 const environmentName = stack.parameters.add("environmentName", "string");
@@ -29,11 +27,27 @@ const effectiveApplicationUniqueName = stack.variables.add(
   ),
 );
 
-const serverApplicationAppId = bicepRef<string>("serverApplication.appId");
-const serverApplicationId = bicepRef<string>("serverApplication.id");
-const serverServicePrincipalId = bicepRef<string>("serverServicePrincipal.id");
+const serverApplication = createGraphResource(stack, {
+  identifier: "serverApplication",
+  type: "Microsoft.Graph/applications",
+  body: {
+    uniqueName: effectiveApplicationUniqueName,
+    displayName: applicationName,
+    signInAudience: "AzureADMyOrg",
+    serviceManagementReference: fn.cond<string | null>(
+      fn.not(fn.empty(serviceManagementReference)),
+      serviceManagementReference,
+      null,
+    ),
+  },
+});
+const serverServicePrincipal = createGraphResource(stack, {
+  identifier: "serverServicePrincipal",
+  type: "Microsoft.Graph/servicePrincipals",
+  body: { appId: serverApplication.appId },
+});
 
-stack.outputs.add("SERVER_AUDIENCE", "string", serverApplicationAppId);
+stack.outputs.add("SERVER_AUDIENCE", "string", serverApplication.appId);
 stack.outputs.add(
   "SERVER_APPLICATION_UNIQUE_NAME",
   "string",
@@ -42,43 +56,21 @@ stack.outputs.add(
 stack.outputs.add(
   "SERVER_APPLICATION_OBJECT_ID",
   "string",
-  serverApplicationId,
+  serverApplication.id,
 );
 stack.outputs.add(
   "SERVER_SERVICE_PRINCIPAL_ID",
   "string",
-  serverServicePrincipalId,
+  serverServicePrincipal.id,
 );
 stack.outputs.add(
   "RAG_SERVICE_SCOPE",
   "string",
-  fn.concat("api://", serverApplicationAppId, "/.default"),
+  fn.concat("api://", serverApplication.appId, "/.default"),
 );
 
-const rendered = renderGraphStack(stack, [
-  {
-    identifier: "serverApplication",
-    type: "Microsoft.Graph/applications",
-    body: {
-      uniqueName: effectiveApplicationUniqueName,
-      displayName: applicationName,
-      signInAudience: "AzureADMyOrg",
-      serviceManagementReference: fn.cond<string | null>(
-        fn.not(fn.empty(serviceManagementReference)),
-        serviceManagementReference,
-        null,
-      ),
-    },
-  },
-  {
-    identifier: "serverServicePrincipal",
-    type: "Microsoft.Graph/servicePrincipals",
-    body: { appId: serverApplicationAppId },
-  },
-]);
-
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
+export default defineProvisioning({
+  stack,
   parameters: {
     environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
     applicationUniqueName: fn.readEnvironmentVariable(
@@ -91,9 +83,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = rendered.outputJson;
-export const outputBicep = [
-  { ...rendered.main, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

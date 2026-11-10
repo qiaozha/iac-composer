@@ -1,7 +1,7 @@
-import { bicepRef, createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { createParameterVariables, defineProvisioning } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { UserAssignedIdentity } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
 import { Component as ApplicationInsightsComponent, WebTest } from "@azure/provisioning-appinsights";
@@ -501,17 +501,18 @@ stack.outputs.add(
 );
 stack.outputs.add("FRONTEND_SITE_NAME", "string", site.name);
 
-const env = bicepRef<string>("env");
-const deployedFrontendImage = bicepRef<string>("deployedFrontendImage");
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
-  variables: {
+const { env, deployedFrontendImage } = createParameterVariables(
+  stack,
+  {
     env: fn.readEnvironmentVariable("AZURE_ENV_NAME", "dev"),
     deployedFrontendImage: fn.readEnvironmentVariable(
       "SERVICE_FRONTEND_IMAGE_NAME",
       "",
     ),
   },
+);
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
     envName: env,
@@ -582,13 +583,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Frontend provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

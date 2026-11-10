@@ -7,12 +7,12 @@ import {
 import { resolve } from "node:path";
 import { test } from "node:test";
 
-import { outputBicep as sharedBicep } from "../examples/chatbot/src/components/shared/provisioning.js";
-import { outputBicep as agentBicep } from "../examples/chatbot/src/components/agent/provisioning.js";
-import { outputBicep as frontendBicep } from "../examples/chatbot/src/components/frontend/provisioning.js";
-import { outputBicep as agentServerBicep } from "../examples/chatbot/src/components/agent-server/provisioning.js";
-import { outputBicep as functionAppBicep } from "../examples/chatbot/src/components/function-app/provisioning.js";
-import { outputBicep as logicAppBicep } from "../examples/chatbot/src/components/logic-app/provisioning.js";
+import { compiledProvisioning } from "./compiled-provisioning.js";
+
+const [sharedBicep, agentBicep, frontendBicep, agentServerBicep, functionAppBicep, logicAppBicep] =
+  await Promise.all(["shared", "agent", "frontend", "agent-server", "function-app", "logic-app"].map(
+    (component) => compiledProvisioning(`examples/chatbot/src/components/${component}/provisioning.ts`),
+  ));
 
 interface RenderedFile {
   readonly path: string;
@@ -110,6 +110,20 @@ test("component provisioners emit library-generated entry and parameter files", 
       assert.match(main.contents, new RegExp(`output ${output} string`));
     }
   }
+});
+
+test("chatbot resource entrypoints delegate compilation to iac-composer", async () => {
+  for (const component of [
+    "shared/provisioning", "agent/provisioning", "frontend/provisioning",
+    "agent-server/provisioning", "function-app/provisioning", "logic-app/provisioning",
+    "shared/identity-bootstrap", "shared/identity-configuration",
+  ]) {
+    const source = await readFile(resolve("examples/chatbot/src/components", `${component}.ts`), "utf8");
+    assert.match(source, /export default defineProvisioning\(/);
+    assert.doesNotMatch(source, /bicepRef|symbolic-value|renderBicepFiles|renderBicepParameterFile|renderGraphStack|outputBicep/);
+  }
+  const helper = await readFile(resolve("examples/chatbot/src/runtime/provisioning.ts"), "utf8");
+  assert.doesNotMatch(helper, /bicepRef|symbolic-value/);
 });
 
 test("agent creates the bot identity and frontend references it", () => {

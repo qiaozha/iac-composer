@@ -1,7 +1,8 @@
-import { createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { defineProvisioning } from "iac-composer";
+
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { UserAssignedIdentity } from "../../runtime/provisioning.js";
 import { ActionGroup } from "../../runtime/provisioning.js";
 import { KeyVault } from "@azure/provisioning-keyvault";
@@ -566,8 +567,8 @@ for (const [name, value] of outputs) {
   stack.outputs.add(name, "string", value);
 }
 
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
     cosmosDbLocation: fn.readEnvironmentVariable(
@@ -601,13 +602,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Shared provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];
