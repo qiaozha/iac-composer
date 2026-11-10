@@ -44,6 +44,8 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
   assert.match(skill, /fn\.json\("0\.25"\)/);
+  assert.match(skill, /Retain authored deployment code, generated Bicep, parameters and configuration/);
+  assert.match(skill, /deployment\/history\/attempt-N\//);
   assert.match(reference, /Typechecking\s+alone does not catch this serialization error/);
   for (const contents of [skill, reference]) {
     assert.doesNotMatch(contents, /(?<!management[- ])\bSDKs?\b/);
