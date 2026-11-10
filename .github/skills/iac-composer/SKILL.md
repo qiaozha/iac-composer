@@ -57,6 +57,12 @@ installed provisioning-library and runtime-helper TypeScript declarations.
 - Treat generated Bicep, `azure.yaml`, `.azure/`, and
   `.iac-composer-generated.json` as artifacts. Change their authored inputs
   rather than patching generated files.
+- Retain authored deployment code, generated Bicep, parameters and configuration
+  on disk, including on failure. Before replacing failed-attempt files, preserve
+  their non-secret versions under `deployment/history/attempt-N/` or the
+  repository's established artifact-history directory. Keep them available for
+  capture and report their actual paths. Never archive credentials, secret
+  parameters or authentication caches.
 - For fractional numbers emitted into Bicep, use a provisioning expression such
   as `fn.json("0.25")` from `@azure/provisioning-core`, not a raw fractional
   literal. Preserve the exact requested value and sizing; never round it up.
