@@ -1,7 +1,8 @@
-import { createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { defineProvisioning } from "iac-composer";
+
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { ApiConnection } from "../../runtime/provisioning.js";
 import { IntegrationAccount, Workflow } from "../../runtime/provisioning.js";
 import { MetricAlert } from "../../runtime/provisioning.js";
@@ -287,8 +288,8 @@ stack.outputs.add(
   documentDbConnectionName,
 );
 
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION"),
     managedIdentityName: fn.readEnvironmentVariable("MANAGED_IDENTITY_NAME"),
@@ -339,13 +340,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Logic App provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

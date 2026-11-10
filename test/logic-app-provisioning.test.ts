@@ -8,8 +8,10 @@ import {
   logicAppsAccessRestrictionArgs,
   logicAppsAccessRestrictionQueryArgs,
 } from "../examples/chatbot/src/components/logic-app/index.js";
-import { outputBicep } from "../examples/chatbot/src/components/logic-app/provisioning.js";
+import { compiledProvisioning } from "./compiled-provisioning.js";
 import { createLogicAppWorkflowDefinition } from "../examples/chatbot/src/components/logic-app/workflow.js";
+
+const outputBicep = await compiledProvisioning("examples/chatbot/src/components/logic-app/provisioning.ts");
 
 test("Logic App provisioning emits the complete workflow in one template", () => {
   const template = outputBicep.find((file) => file.path === "main.bicep");

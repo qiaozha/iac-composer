@@ -1,11 +1,11 @@
 ---
 name: iac-composer
-description: Implement Azure infrastructure in TypeScript with @azure/provisioning-* resource definitions and iac-composer composition/provisioning APIs. Use for explicit iac-composer requests and Azure resource creation, dependencies, identity/access, output wiring, validation or deployment. Choosing this workflow requires provisioning-library-authored resources and deployment.provision, not just a defineDeployment/deployment.deploy wrapper around handwritten Bicep or Azure CLI provisioning. Bootstrap missing project dependencies; do not treat discovery failures as unsupported resources. Prefer this implementation when no tool or maintained IaC convention is specified, while honoring explicit alternatives. Accept requirements from any planner or the user; no planning skill or JSON contract is required. Not for advice-only, inventory, cost-only or unrelated production diagnostics.
+description: Implement Azure infrastructure in TypeScript with @azure/provisioning-* resource definitions and iac-composer composition/provisioning APIs. Use for explicit iac-composer requests and Azure resource creation, dependencies, identity/access, output wiring, validation or deployment. Use JavaScript data-plane SDKs for service data operations. Choosing this workflow requires provisioning-library-authored resources and deployment.provision, not just a wrapper around unrelated provisioning scripts. Bootstrap missing project dependencies; do not treat discovery failures as unsupported resources. Prefer this implementation when no tool or maintained IaC convention is specified, while honoring explicit alternatives. Accept requirements from any planner or the user; no planning skill or JSON contract is required. Not for advice-only, inventory, cost-only or unrelated production diagnostics.
 license: MIT
-compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Azure execution requires Azure Developer CLI (azd) 1.30 or newer, Azure CLI, and authenticated Azure access.
+compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Use the installed iac-composer APIs and project commands for provisioning and deployment. Cloud execution requires authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.4"
+  version: "2.11"
 ---
 
 # Define infrastructure with iac-composer
@@ -27,7 +27,7 @@ evidence of that implementation.
 
 When the method is unspecified in an opted-in workspace, prefer this workflow
 unless the project has maintained compatible IaC. Keep TypeScript as the source
-of truth; Bicep and azd manifests are generated artifacts. Honor explicit
+of truth; runtime-generated files are artifacts. Honor explicit
 alternative tools and do not migrate maintained IaC without authorization.
 Handwritten artifacts from the current incomplete attempt do not establish a
 new convention that overrides the selected implementation method. If an
@@ -54,16 +54,22 @@ installed provisioning-library and runtime-helper TypeScript declarations.
 - Keep credentials and secrets out of source, generated manifests, parameters,
   logs, and command arguments. Read them from the environment or an approved
   secret store.
-- Treat generated Bicep, `azure.yaml`, `.azure/`, and
-  `.iac-composer-generated.json` as artifacts. Change their authored inputs
+- Treat `.generated/`, runtime state, and `.iac-composer-generated.json` as
+  artifacts. Change their authored inputs
   rather than patching generated files.
-- Retain authored deployment code, generated Bicep, parameters and configuration
-  on disk, including on failure. Before replacing failed-attempt files, preserve
-  their non-secret versions under `deployment/history/attempt-N/` or the
-  repository's established artifact-history directory. Keep them available for
-  capture and report their actual paths. Never archive credentials, secret
-  parameters or authentication caches.
-- For fractional numbers emitted into Bicep, use a provisioning expression such
+- Runtime-managed files inside `.generated` do not select a separate deployment
+  workflow. Do not load another deployment skill or invoke backend tools because
+  those artifacts exist. Continue through the authored iac-composer program,
+  using `deployment.provision` for infrastructure and `deployment.deploy` for
+  guarded application and data-plane actions.
+  Inspect the current generated files for diagnostics without creating
+  historical copies. Separately maintained infrastructure remains subject to
+  its own explicit instructions.
+- Maintain one canonical working implementation. Fix authored source in place
+  and regenerate its outputs; do not create attempt-history directories,
+  snapshot copies, or parallel implementations unless explicitly requested.
+  Use existing version control for recovery and preserve unrelated user changes.
+- For fractional numbers in provisioning definitions, use an expression such
   as `fn.json("0.25")` from `@azure/provisioning-core`, not a raw fractional
   literal. Preserve the exact requested value and sizing; never round it up.
   Follow [fractional numeric values](./references/direct-authoring.md#fractional-numeric-values)
@@ -81,8 +87,51 @@ installed provisioning-library and runtime-helper TypeScript declarations.
 ## Direct composition
 
 Read [the direct authoring reference](./references/direct-authoring.md).
-Reuse existing provisioning-library code, custom compilers, and lifecycle
+Reuse existing provisioning-library code, runtime-compatible entrypoints, and lifecycle
 helpers. Preserve the selected resource plan without redesigning it.
+
+## Service modules and ordered layers
+
+The CLI deployment program must default-export
+`defineDeployment(async (deployment) => { ... })`. Resource entrypoints loaded
+by its `deployment.provision` calls default-export `defineProvisioning({ stack })`.
+`defineProvisioning` does not replace the deployment program's default export.
+Service modules export named lifecycle functions called by that program; these
+modules are parts of one implementation, not alternate deployment programs.
+
+Use `defineDeployment(async (deploy) => { ... })` as the composition root.
+`deploy` is the callback's `Deployment` instance, not a separate API.
+Await service-module functions in dependency order. Each module should own its
+resource provisioning and the application/data operations that follow it:
+
+- Put shared network, identity and other prerequisites in shared layers.
+- Use `await deploy.provision(...)` for each independently provisionable layer,
+  returning its outputs to later modules.
+- Use `await deploy.deploy(...)` for image/application actions, readiness checks,
+  and JavaScript data-plane SDK calls after their resource, RBAC and network
+  prerequisites. Do not nest provisioning inside a deploy callback: dry runs
+  skip that callback and would miss its infrastructure.
+- Give each layer a distinct `.generated/<layer>` directory directly below the
+  same absolute `.generated` root. `deploy.inDirectory(...)` changes a service's
+  working context while preserving layer dependency order.
+- A TypeScript service module and a provisioning layer are different boundaries.
+  Imports do not automatically split a resource stack or schedule deployments.
+  Wire layer entrypoints through the installed iac-composer APIs and preserve
+  the runtime-managed artifact layout.
+- Bind earlier outputs through the provisioning API's parameters, not top-level
+  reads of live state in the provisioning entrypoint.
+- Default-export `defineProvisioning({ stack })` from each resource entrypoint.
+  The runtime compiles the stack and manages parameter bindings. Declare
+  optional `parameters`, `parameterVariables`, and `graphResources` in that
+  definition only when the layer needs them.
+- Use `createParameterVariables` and `createGraphResource` for declared, typed
+  handles, and `loopResource` callbacks for typed loop items. Do not construct
+  symbolic paths by hand or cast an arbitrary string into a resource reference.
+
+Follow the [service-module example](./references/direct-authoring.md#service-modules-and-ordered-provisioning).
+Inspect a dry-run report for layer dependencies, nested artifacts and the
+interleaved provision/deploy sequence; test actual callback order and failures
+offline before an authorized cloud run.
 
 ## Provisioning library release selection
 
@@ -93,12 +142,31 @@ their exact names, including `@azure/provisioning-appinsights` and
 when the snapshot is stale; a package missing locally is not unpublished.
 
 For services verified as not yet released on npmjs, use
-[`Resource` from core](./references/direct-authoring.md#missing-service-provisioning-libraries-are-not-a-raw-bicep-default)
-in the same Stack/render/`deployment.provision` pipeline. Do not install
-nonexistent, vendored, or obsolete service packages, or substitute handwritten
-Bicep/CLI provisioning merely because a service package is unpublished.
-Serialization, AST support, and Bicep rendering are included in core; do not
-add their old standalone packages.
+[`Resource` from core](./references/direct-authoring.md#core-resource-fallback-for-unpublished-services)
+in the same Stack/`deployment.provision` pipeline. Do not install nonexistent,
+vendored, or obsolete service packages, or substitute unrelated provisioning
+scripts merely because a service package is unpublished. Compilation support
+is included in core; do not add legacy standalone packages.
+
+## Data-plane operations
+
+For service data operations, prefer official Azure JavaScript data-plane SDKs
+over handwritten REST calls, `fetch`, `curl`, or CLI data commands. Follow the
+[data-plane SDK guidance](./references/direct-authoring.md#data-plane-operations-with-javascript-sdks)
+for package selection, authentication, and sequencing. Reuse an existing helper
+when it already uses the appropriate client.
+
+Keep ARM resource creation, configuration, and role assignments in the
+provisioning libraries/core fallback. A missing provisioning package does not
+make a data-plane SDK a resource-provisioning replacement. Declare needed client
+packages and `@azure/identity` locally; inspect their installed types and official
+documentation rather than passing them to the provisioning-only reference tool.
+
+Run data-plane SDK calls in awaited `deployment.deploy` actions after the
+resource outputs, data-plane RBAC, and network access are ready. Construct
+credentials and clients inside the action; dry runs must not authenticate, read
+service data, or mutate it. Prefer Microsoft Entra credentials, use returned
+endpoints, and preserve explicit idempotency, error handling, and secret hygiene.
 
 ## Required process
 
@@ -107,7 +175,7 @@ add their old standalone packages.
 Identify:
 
 - the package manager, Node.js version, module format, and existing scripts;
-- existing `iac-composer`, `azure.yaml`, `.generated`, deployment, environment,
+- existing `iac-composer`, `.generated`, deployment, environment,
   and provisioning files;
 - application components, their source directories, and Dockerfiles;
 - the intended Azure subscription, tenant, scope, environment names, and
@@ -150,21 +218,21 @@ inherited keys such as `toString` cannot be selected as components.
   the reference. Only a demonstrated core/renderer limitation warrants considering
   a narrowly documented unsupported-control fallback;
 - default-export `defineDeployment(async (deployment) => { ... })`;
-- make each provisioning entrypoint export a non-empty `outputBicep` array of
-  `{ path, contents }`, including the selected template and `.bicepparam`
-  artifacts with real parameter bindings;
-- call `deployment.provision` with an entrypoint or with a compiler plus
-  `artifactsDirectory`;
+- connect each typed resource layer to `deployment.provision` using the
+  `defineProvisioning` entrypoint API and real parameter bindings;
 - use one `.generated/<component>` output directory per layer;
 - use returned outputs rather than reconstructing resource names or endpoints;
 - wrap application and configuration side effects in `deployment.deploy`,
   commands in `deployment.run`, and ordered environment changes in
-  `deployment.env`.
+  `deployment.env`;
+- use JavaScript data-plane SDKs inside those guarded actions for service data
+  APIs, not provisioning resources or handwritten HTTP when a supported client
+  covers the operation.
 
-Do not replace infrastructure authoring with handwritten Bicep, a script that
-copies Bicep into `outputBicep`, or direct `az deployment` calls hidden inside
-`deployment.deploy`. Custom compilers remain valid for existing authored
-provisioning source; they are not a way to relabel an unrelated implementation.
+Do not replace infrastructure authoring with unrelated provisioning scripts or
+direct resource-creation commands hidden inside `deployment.deploy`. Keep
+compilation and provisioning behind the iac-composer API boundary rather than
+adding a separate deployment toolchain to the workflow.
 Document any genuine unsupported-control exception with its installed
 package/version, missing type/property and bounded fallback. If required
 packages or matching runtime/reference assets cannot be obtained from an
@@ -176,9 +244,9 @@ approved source, report the blocker instead of abandoning the selected method.
   architecture permits them.
 - Prefer `AZURE_LOCATION` for the solution location and
   `AZURE_AI_LOCATION` for AI resources when those regions differ.
-- Pass Bicep parameter values through `parameters` or `environmentValues`;
+- Pass provisioning values through `parameters` or `environmentValues`;
   never interpolate secrets into generated source.
-- Persist outputs in the repository's existing azd environment when later
+- Persist outputs through the repository's existing environment helpers when later
   components or reruns need them.
 - Keep production restrictions and CI-only policies already present in the
   repository.
@@ -207,10 +275,15 @@ Before reporting completion, verify that:
 - generated TypeScript and provisioning entrypoints typecheck;
 - project manifests declare the runtime/core/resource dependencies and authored
   imports use public package names, not machine-specific `dist` paths;
-- resource entrypoints construct provisioning library resources, render non-empty `outputBicep`,
-  and the deployment program actually calls `deployment.provision`;
+- data-plane operations use the appropriate JavaScript clients and declared
+  dependencies, with authentication and calls skipped during dry runs;
+- resource entrypoints construct provisioning library resources and the
+  deployment program actually calls `deployment.provision`;
 - the dry run compiles those entrypoints and emits the expected generated
   infrastructure and ordered provision steps, not only a skipped deploy wrapper;
-- no secret or local azd state was added to version control;
+- service modules retain their complete resource relationships and share the intended
+  layer dependency order; dependent application/data actions run only after
+  provisioning succeeds and are skipped in dry runs;
+- no secret or local authentication/environment state was added to version control;
 - any operation not executed because it would change Azure is called out
   clearly with the exact next command.

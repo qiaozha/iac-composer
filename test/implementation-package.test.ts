@@ -92,19 +92,15 @@ test("the packed runtime implements discovery and provisioning library authoring
       compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: true, types: ["node"] },
       include: ["*.ts"],
     }));
-    await writeFile(join(workspace, "provisioning.ts"), await readFile(
-      join(repository, "tools/azure-infrastructure/src/runtime/provisioning.ts"), "utf8",
-    ));
     const sdk = await client!.callTool({
       name: "iac_composer_get_reference", arguments: { packageName: "@azure/provisioning-storage", symbol: "StorageAccount" },
     });
     assert.equal(object(sdk.structuredContent).status, "ready");
     assert.match(JSON.stringify(sdk.structuredContent), /constructor/);
     await writeFile(join(workspace, "infra.ts"), `
-import { Stack } from "@azure/provisioning-core";
-import { fn } from "./provisioning.js";
+import { Stack, fn } from "@azure/provisioning-core";
+import { defineProvisioning } from "iac-composer";
 import { StorageAccount } from "@azure/provisioning-storage";
-import { renderBicepFiles, createBicepParameterFile, renderBicepParameterFile } from "./provisioning.js";
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
 const storage = new StorageAccount(stack, {
@@ -113,21 +109,14 @@ const storage = new StorageAccount(stack, {
   properties: { minimumTlsVersion: "TLS1_2", allowBlobPublicAccess: false, allowSharedKeyAccess: false, enableHttpsTrafficOnly: true }
 });
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
-const [rendered] = renderBicepFiles([stack]);
-if (!rendered) throw new Error("Missing rendered stack");
-export const outputBicep = [
-  { ...rendered, path: "main.bicep" },
-  renderBicepParameterFile(createBicepParameterFile(stack, "main.bicepparam", {
-    using: "./main.bicep", parameters: { location: fn.readEnvironmentVariable("AZURE_LOCATION") }
-  }))
-];`);
+export default defineProvisioning({ stack });`);
     await writeFile(join(workspace, "deploy.ts"), `
 import { defineDeployment, ensureResourceGroup, requiredEnv } from "iac-composer";
 export default defineDeployment(async (d) => {
   await d.deploy("ensure resource group", async () => {
     await ensureResourceGroup(d, { name: requiredEnv("AZURE_RESOURCE_GROUP"), location: requiredEnv("AZURE_LOCATION"), subscription: requiredEnv("AZURE_SUBSCRIPTION_ID") });
   });
-  const outputs = await d.provision("archive storage", { entrypoint: "./infra.ts", outputDirectory: ".generated/storage" });
+  const outputs = await d.provision("archive storage", { entrypoint: "./infra.ts", outputDirectory: ".generated/storage", parameters: { location: requiredEnv("AZURE_LOCATION") } });
   await d.env("publish outputs", outputs);
 });`);
     await execFileAsync(process.execPath, [

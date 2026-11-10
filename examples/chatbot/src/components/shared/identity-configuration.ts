@@ -1,8 +1,6 @@
-import { bicepRef, createBicepParameterFile, renderBicepParameterFile } from "../../runtime/provisioning.js";
+import { createGraphResource, defineProvisioning } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-
-import { renderGraphStack } from "./graph-provisioning.js";
 
 const azureCliApplicationId = "04b07795-8ddb-461a-bbee-02f9e1bf7b46";
 
@@ -110,11 +108,59 @@ const preAuthorizedApplications = fn.cond<PreAuthorizedApplication[]>(
   ],
   [],
 );
-const serverApplicationId = bicepRef<string>("serverApplication.id");
-const serverApplicationAppId = bicepRef<string>("serverApplication.appId");
-const serverServicePrincipalId = bicepRef<string>("serverServicePrincipal.id");
+const serverApplication = createGraphResource(stack, {
+  identifier: "serverApplication",
+  type: "Microsoft.Graph/applications",
+  body: {
+    uniqueName: effectiveApplicationUniqueName,
+    displayName: applicationName,
+    signInAudience: "AzureADMyOrg",
+    serviceManagementReference: fn.cond<string | null>(
+      fn.not(fn.empty(serviceManagementReference)),
+      serviceManagementReference,
+      null,
+    ),
+    identifierUris: [fn.concat("api://", serverAudience)],
+    api: {
+      requestedAccessTokenVersion: 2,
+      oauth2PermissionScopes: fn.union(existingPermissionScopes, [
+        permissionScope,
+      ]),
+      preAuthorizedApplications,
+    },
+    appRoles: fn.union(existingApplicationRoles, [applicationRole]),
+  },
+});
+const serverServicePrincipal = createGraphResource(stack, {
+  identifier: "serverServicePrincipal",
+  type: "Microsoft.Graph/servicePrincipals",
+  body: { appId: serverAudience },
+  dependsOn: [serverApplication],
+});
+createGraphResource(stack, {
+  identifier: "managedIdentityRoleAssignment",
+  type: "Microsoft.Graph/appRoleAssignedTo",
+  condition: fn.not(fn.empty(managedIdentityPrincipalId)),
+  body: {
+    appRoleId: effectiveApplicationRoleId,
+    principalId: managedIdentityPrincipalId,
+    resourceId: serverServicePrincipal.id,
+    resourceDisplayName: applicationName,
+  },
+});
+createGraphResource(stack, {
+  identifier: "botIdentityRoleAssignment",
+  type: "Microsoft.Graph/appRoleAssignedTo",
+  condition: fn.not(fn.empty(botIdentityPrincipalId)),
+  body: {
+    appRoleId: effectiveApplicationRoleId,
+    principalId: botIdentityPrincipalId,
+    resourceId: serverServicePrincipal.id,
+    resourceDisplayName: applicationName,
+  },
+});
 
-stack.outputs.add("SERVER_AUDIENCE", "string", serverApplicationAppId);
+stack.outputs.add("SERVER_AUDIENCE", "string", serverApplication.appId);
 stack.outputs.add(
   "SERVER_APPLICATION_UNIQUE_NAME",
   "string",
@@ -123,12 +169,12 @@ stack.outputs.add(
 stack.outputs.add(
   "SERVER_APPLICATION_OBJECT_ID",
   "string",
-  serverApplicationId,
+  serverApplication.id,
 );
 stack.outputs.add(
   "SERVER_SERVICE_PRINCIPAL_ID",
   "string",
-  serverServicePrincipalId,
+  serverServicePrincipal.id,
 );
 stack.outputs.add(
   "SERVER_APPLICATION_ROLE_ID",
@@ -146,64 +192,8 @@ stack.outputs.add(
   fn.concat("api://", serverAudience, "/.default"),
 );
 
-const rendered = renderGraphStack(stack, [
-  {
-    identifier: "serverApplication",
-    type: "Microsoft.Graph/applications",
-    body: {
-      uniqueName: effectiveApplicationUniqueName,
-      displayName: applicationName,
-      signInAudience: "AzureADMyOrg",
-      serviceManagementReference: fn.cond<string | null>(
-        fn.not(fn.empty(serviceManagementReference)),
-        serviceManagementReference,
-        null,
-      ),
-      identifierUris: [fn.concat("api://", serverAudience)],
-      api: {
-        requestedAccessTokenVersion: 2,
-        oauth2PermissionScopes: fn.union(existingPermissionScopes, [
-          permissionScope,
-        ]),
-        preAuthorizedApplications,
-      },
-      appRoles: fn.union(existingApplicationRoles, [applicationRole]),
-    },
-  },
-  {
-    identifier: "serverServicePrincipal",
-    type: "Microsoft.Graph/servicePrincipals",
-    body: {
-      appId: serverAudience,
-      dependsOn: [bicepRef("serverApplication")],
-    },
-  },
-  {
-    identifier: "managedIdentityRoleAssignment",
-    type: "Microsoft.Graph/appRoleAssignedTo",
-    condition: fn.not(fn.empty(managedIdentityPrincipalId)),
-    body: {
-      appRoleId: effectiveApplicationRoleId,
-      principalId: managedIdentityPrincipalId,
-      resourceId: serverServicePrincipalId,
-      resourceDisplayName: applicationName,
-    },
-  },
-  {
-    identifier: "botIdentityRoleAssignment",
-    type: "Microsoft.Graph/appRoleAssignedTo",
-    condition: fn.not(fn.empty(botIdentityPrincipalId)),
-    body: {
-      appRoleId: effectiveApplicationRoleId,
-      principalId: botIdentityPrincipalId,
-      resourceId: serverServicePrincipalId,
-      resourceDisplayName: applicationName,
-    },
-  },
-]);
-
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
+export default defineProvisioning({
+  stack,
   parameters: {
     environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
     applicationUniqueName: fn.readEnvironmentVariable(
@@ -243,9 +233,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     ),
   },
 });
-
-export const outputJson = rendered.outputJson;
-export const outputBicep = [
-  { ...rendered.main, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

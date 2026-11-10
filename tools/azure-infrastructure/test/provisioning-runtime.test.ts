@@ -97,13 +97,15 @@ test("multiple stacks reject conflicting artifact paths", () => {
   assert.throws(() => renderBicepFiles([first, second]), /Duplicate Bicep file path/);
 });
 
-test("examples carry the same provisioning helper as generated deployments", async () => {
+test("legacy examples retain their helper while chatbot delegates compilation to the runtime", async () => {
   const source = await readFile(resolve("src/runtime/provisioning.ts"), "utf8");
   for (const file of [
-    "../../examples/chatbot/src/runtime/provisioning.ts",
     "../../examples/contoso/runtime/provisioning.ts",
     "../../examples/foundry/runtime/provisioning.ts",
   ]) {
     assert.equal(await readFile(resolve(file), "utf8"), source, file);
   }
+  const chatbot = await readFile(resolve("../../examples/chatbot/src/runtime/provisioning.ts"), "utf8");
+  assert.match(chatbot, /export \{ loopResource \} from "iac-composer"/);
+  assert.doesNotMatch(chatbot, /renderBicepFiles|renderBicepParameterFile|renderGraphStack/);
 });

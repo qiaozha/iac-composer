@@ -1,7 +1,7 @@
-import { bicepRef, createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { createParameterVariables, defineProvisioning } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { Workspace } from "@azure/provisioning-operationalinsights";
 import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
 import { AppServicePlan, Site } from "../../runtime/provisioning.js";
@@ -178,12 +178,9 @@ const site = new Site(stack, {
 
 stack.outputs.add("FUNCTION_APP_NAME", "string", site.name);
 
-const env = bicepRef<string>("env");
-const deployedFunctionImage = bicepRef<string>("deployedFunctionImage");
-const registryEndpoint = bicepRef<string>("registryEndpoint");
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
-  variables: {
+const { env, deployedFunctionImage, registryEndpoint } = createParameterVariables(
+  stack,
+  {
     env: fn.readEnvironmentVariable("AZURE_ENV_NAME", "dev"),
     deployedFunctionImage: fn.readEnvironmentVariable(
       "SERVICE_FUNCTION_APP_IMAGE_NAME",
@@ -193,6 +190,9 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
       "AZURE_CONTAINER_REGISTRY_ENDPOINT",
     ),
   },
+);
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
     containerImage: fn.cond(
@@ -227,13 +227,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     functionAppName: fn.readEnvironmentVariable("FUNCTION_APP_NAME", ""),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Function App provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

@@ -3,8 +3,12 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
 
-import { outputBicep as bootstrap } from "../examples/chatbot/src/components/shared/identity-bootstrap.js";
-import { outputBicep as configuration } from "../examples/chatbot/src/components/shared/identity-configuration.js";
+import { compiledProvisioning } from "./compiled-provisioning.js";
+
+const [bootstrap, configuration] = await Promise.all([
+  compiledProvisioning("examples/chatbot/src/components/shared/identity-bootstrap.ts"),
+  compiledProvisioning("examples/chatbot/src/components/shared/identity-configuration.ts"),
+]);
 
 test("identity bootstrap emits Graph application and service principal resources", async () => {
   const template = requiredFile(bootstrap, "main.bicep");

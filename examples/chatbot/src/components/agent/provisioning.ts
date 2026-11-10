@@ -1,12 +1,12 @@
-import { createBicepParameterFile, renderBicepParameterFile, renderBicepFiles } from "../../runtime/provisioning.js";
+import { defineProvisioning, loopResource } from "iac-composer";
+
 import { Stack, type Expression, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
-import { serialize } from "../../runtime/provisioning.js";
+
 import { UserAssignedIdentity } from "../../runtime/provisioning.js";
 import { Workspace } from "@azure/provisioning-operationalinsights";
 import { Component as ApplicationInsightsComponent } from "@azure/provisioning-appinsights";
 import { Account, CognitiveServicesConnection as AccountConnection, Deployment, Project, CognitiveServicesProjectConnection as ProjectConnection, types } from "@azure/provisioning-cognitiveservices";
-import { bicepRef, loopResource } from "../../runtime/provisioning.js";
 import { Registry } from "@azure/provisioning-containerregistry";
 import { grantRole, RoleAssignment } from "../../runtime/provisioning.js";
 
@@ -205,17 +205,23 @@ const modelDeploymentConfigs = stack.variables.add("modelDeploymentConfigs", [
     },
     sku: { name: "GlobalStandard", capacity: 1 },
   },
-]);
+] as const satisfies readonly {
+  name: string;
+  properties: types.DeploymentProperties;
+  sku: types.Sku;
+}[]);
 const modelDeployments = loopResource(
   stack,
-  new Deployment(account, {
-    name: bicepRef("deployment.name"),
-    properties: bicepRef<types.DeploymentProperties>("deployment.properties"),
-    sku: bicepRef<types.Sku>("deployment.sku"),
-  }),
   modelDeploymentConfigs,
-  "deployment",
-  1,
+  {
+    itemVariable: "deployment",
+    batchSize: 1,
+    create: (deployment) => new Deployment(account, {
+      name: deployment.name,
+      properties: deployment.properties,
+      sku: deployment.sku,
+    }),
+  },
 );
 
 new AccountConnection(
@@ -377,8 +383,8 @@ stack.outputs.add(
   botIdentity.properties.tenantId as any,
 );
 
-const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
-  using: "./main.bicep",
+export default defineProvisioning({
+  stack,
   parameters: {
     location: fn.readEnvironmentVariable(
       "AZURE_AI_DEPLOYMENTS_LOCATION",
@@ -423,13 +429,3 @@ const parameterFile = createBicepParameterFile(stack, "main.bicepparam", {
     aiProjectName: fn.readEnvironmentVariable("AI_PROJECT_NAME", ""),
   },
 });
-
-export const outputJson = serialize([stack]);
-const [renderedStack] = renderBicepFiles([stack]);
-if (renderedStack === undefined) {
-  throw new Error("Agent provisioning produced no Bicep entry file.");
-}
-export const outputBicep = [
-  { ...renderedStack, path: "main.bicep" },
-  renderBicepParameterFile(parameterFile),
-];

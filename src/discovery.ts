@@ -15,7 +15,7 @@ const topics = {
     topics: ["overview", "commands", "provisioning", "report"],
     resources: {
       catalog: null,
-      source: "Customer-selected @azure/provisioning-* packages or a custom compiler exporting Bicep artifacts.",
+      source: "Customer-selected @azure/provisioning-* stacks exported with defineProvisioning; legacy rendered-file and custom-compiler inputs remain supported.",
       planningRequired: false,
       planningInput: "Resource requirements from the user, repository evidence, or any planning workflow; no planner-specific JSON contract is required.",
       delegatedCommands: ["generate", "validate", "architecture-catalog"],
@@ -81,6 +81,11 @@ const topics = {
       inDirectory: "Create a child context preserving environment, component, preview, log and event observer.",
     },
     source: {
+      entrypointContract: {
+        preferred: "Default-export defineProvisioning({ stack, parameters?, parameterVariables?, graphResources? }); the runtime compiles and binds parameters.",
+        references: "Declare typed handles with createParameterVariables and createGraphResource; use loopResource collection callbacks for inferred loop-item fields.",
+        legacy: "A named outputBicep array or default object containing that array is still supported.",
+      },
       oneOf: [
         { required: ["layer"], shape: { layer: { entrypoint: "string", outputDirectory: "string" } } },
         { required: ["entrypoint"], shape: { entrypoint: "string", outputDirectory: "optional string" } },
@@ -100,7 +105,7 @@ const topics = {
       location: { type: "string", default: "AZURE_LOCATION" },
       scope: { enum: ["subscription", "resourceGroup"], description: "Bicep targetScope remains authoritative." },
       resourceGroup: { type: "string", description: "Passed to azd as AZURE_RESOURCE_GROUP." },
-      parameters: { type: "object", values: ["string", "number", "boolean"], constraint: "Overrides require a .bicepparam parameter directly bound to readEnvironmentVariable()." },
+      parameters: { type: "object", values: ["string", "number", "boolean"], constraint: "Stack definitions receive generated typed bindings; legacy artifacts need readEnvironmentVariable() with optional bool/int/json conversion." },
       environmentValues: { type: "object", values: ["string", "undefined"] },
     },
     outputBicepSchema: {
