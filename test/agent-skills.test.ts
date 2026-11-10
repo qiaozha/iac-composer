@@ -54,6 +54,44 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.equal(typeof describeRuntimeCapabilities("overview"), "object");
 });
 
+test("the skill distinguishes released npm libraries from services requiring core Resource", async () => {
+  const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
+  const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
+  assert.match(skill, /references\/direct-authoring\.md#npmjs-release-status/);
+  assert.match(skill, /For services verified as not yet released on npmjs, use/);
+  assert.match(reference, /Checked \*\*\d{4}-\d{2}-\d{2}\*\* directly against/);
+  const published = reference.split("### Published packages\n")[1]?.split("### Not yet published: use core Resource\n")[0];
+  const unpublished = reference.split("### Not yet published: use core Resource\n")[1]?.split("### Refreshing the status\n")[0];
+  assert.ok(published && unpublished);
+  const releases = [...published.matchAll(/\[@azure\/provisioning-([a-z]+)\]\(https:\/\/www\.npmjs\.com\/package\/@azure\/provisioning-[a-z]+\) \| `(1\.0\.0-beta\.\d+)`/g)]
+    .map((match) => [match[1], match[2]]);
+  assert.deepEqual(Object.fromEntries(releases), {
+    core: "1.0.0-beta.2",
+    appinsights: "1.0.0-beta.1",
+    containerregistry: "1.0.0-beta.1",
+    cognitiveservices: "1.0.0-beta.1",
+    cosmosdb: "1.0.0-beta.1",
+    eventhub: "1.0.0-beta.1",
+    keyvault: "1.0.0-beta.2",
+    operationalinsights: "1.0.0-beta.1",
+    search: "1.0.0-beta.1",
+    servicebus: "1.0.0-beta.1",
+    sql: "1.0.0-beta.1",
+    storage: "1.0.0-beta.1",
+  });
+  for (const service of [
+    "appconfiguration", "appservice", "authorization", "botservice", "compute",
+    "appcontainers", "containerapps", "containerservice", "logic",
+    "managed-identity", "monitor", "network",
+  ]) {
+    assert.ok(unpublished.includes(`\`@azure/provisioning-${service}\``), service);
+  }
+  assert.match(unpublished, /core fallback scenario/);
+  assert.match(unpublished, /\*\*replaced by core\*\*/);
+  assert.match(reference, /authentication\s+failure, registry override, timeout, or network error does not establish\s+unpublished status/);
+  assert.match(published, /Do not blindly select `latest`/);
+});
+
 test("documented provisioning library resources, fractional values and core Resource fallback typecheck and compile in a real CLI dry run", async (t) => {
   const consumer = await mkdtemp(join(tmpdir(), "iac-composer-authoring-contract-"));
   t.after(() => rm(consumer, { recursive: true, force: true }));

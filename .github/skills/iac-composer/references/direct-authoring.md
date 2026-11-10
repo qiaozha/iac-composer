@@ -21,12 +21,14 @@ equivalent.
 1. Inspect the target project's manifest, lockfile, Node version and approved
    package sources. Use Node.js 22 or newer for the provisioning libraries.
    Declare `iac-composer`, `@azure/provisioning-core` and only the service
-   packages actually needed; update the manifest before installing with the
+   packages actually needed and publicly released according to the
+   [release status](#npmjs-release-status); use core `Resource` for unpublished
+   services. Update the manifest before installing with the
    existing package manager. Preserve selected versions and the lockfile.
 2. Resolve `iac-composer` through its public package export from the authored
    project. A globally installed CLI does not make ESM imports resolve locally.
    Reuse an approved built package/archive or configured registry when the
-   runtime is private/unpublished. A registry 404 is a package-source blocker,
+   runtime is private/unpublished. A runtime registry 404 is a package-source blocker,
    not authorization to rewrite the deployment in raw Bicep. Never persist an
    absolute host path such as `/opt/.../iac-composer/dist/index.js`.
 3. Inventory the actual project, then request only the declarations needed:
@@ -65,6 +67,89 @@ Expose the real local program through the canonical project command:
 
 The script alone is not proof of provisioning library resource authoring. Check its provisioning
 entrypoints, imports, generated artifacts and `deployment.provision` steps.
+
+## npmjs release status
+
+Checked **2026-11-10** directly against the
+[public npm registry](https://registry.npmjs.org/). This is a dated snapshot of
+the packages checked below, not an exhaustive service-support matrix. Public
+beta releases count as released; they are not GA releases.
+
+### Published packages
+
+Use the service-specific constructs from these exact package names when they
+cover the required resource. The verified service versions below all depend on
+`@azure/provisioning-core` **1.0.0-beta.2** and require **Node.js >=22.0.0**.
+Preserve an existing compatible project selection rather than upgrading it
+implicitly.
+
+| Library/service | Public npm package | Verified release |
+| --- | --- | --- |
+| Core, serialization, AST, Bicep rendering | [@azure/provisioning-core](https://www.npmjs.com/package/@azure/provisioning-core) | `1.0.0-beta.2` |
+| Application Insights | [@azure/provisioning-appinsights](https://www.npmjs.com/package/@azure/provisioning-appinsights) | `1.0.0-beta.1` |
+| Container Registry | [@azure/provisioning-containerregistry](https://www.npmjs.com/package/@azure/provisioning-containerregistry) | `1.0.0-beta.1` |
+| Cognitive Services / Foundry accounts and projects | [@azure/provisioning-cognitiveservices](https://www.npmjs.com/package/@azure/provisioning-cognitiveservices) | `1.0.0-beta.1` |
+| Cosmos DB | [@azure/provisioning-cosmosdb](https://www.npmjs.com/package/@azure/provisioning-cosmosdb) | `1.0.0-beta.1` |
+| Event Hubs | [@azure/provisioning-eventhub](https://www.npmjs.com/package/@azure/provisioning-eventhub) | `1.0.0-beta.1` |
+| Key Vault | [@azure/provisioning-keyvault](https://www.npmjs.com/package/@azure/provisioning-keyvault) | `1.0.0-beta.2` |
+| Log Analytics | [@azure/provisioning-operationalinsights](https://www.npmjs.com/package/@azure/provisioning-operationalinsights) | `1.0.0-beta.1` |
+| AI Search | [@azure/provisioning-search](https://www.npmjs.com/package/@azure/provisioning-search) | `1.0.0-beta.1` |
+| Service Bus | [@azure/provisioning-servicebus](https://www.npmjs.com/package/@azure/provisioning-servicebus) | `1.0.0-beta.1` |
+| SQL | [@azure/provisioning-sql](https://www.npmjs.com/package/@azure/provisioning-sql) | `1.0.0-beta.1` |
+| Storage | [@azure/provisioning-storage](https://www.npmjs.com/package/@azure/provisioning-storage) | `1.0.0-beta.1` |
+
+Do not use the old `applicationinsights` or `container-registry` package suffixes;
+the public names are `appinsights` and `containerregistry`. Event Hubs uses the
+singular `eventhub`, not `eventhubs`. Do not blindly select `latest`: core's
+`latest` tag currently points to an alpha, and Key Vault's `latest` tag points
+to beta.1 even though beta.2 is available. Verify dependency compatibility and
+pin an approved version.
+
+### Not yet published: use core Resource
+
+The following package names returned **404** from the public npm registry on
+the checked date. For these services, use `Resource` from
+`@azure/provisioning-core` with the verified ARM type, API version, properties,
+scope, dependencies, and outputs, following the
+[core fallback scenario](#missing-service-provisioning-libraries-are-not-a-raw-bicep-default).
+
+| Service | Unpublished package checked | Example core Resource type |
+| --- | --- | --- |
+| App Configuration | `@azure/provisioning-appconfiguration` | `Microsoft.AppConfiguration/configurationStores` |
+| App Service / Functions | `@azure/provisioning-appservice` | `Microsoft.Web/sites` |
+| Authorization / RBAC | `@azure/provisioning-authorization` | `Microsoft.Authorization/roleAssignments` |
+| Bot Service | `@azure/provisioning-botservice` | `Microsoft.BotService/botServices` |
+| Compute | `@azure/provisioning-compute` | `Microsoft.Compute/virtualMachines` |
+| Container Apps | `@azure/provisioning-appcontainers`, `@azure/provisioning-containerapps` | `Microsoft.App/containerApps` |
+| AKS | `@azure/provisioning-containerservice` | `Microsoft.ContainerService/managedClusters` |
+| Logic Apps | `@azure/provisioning-logic` | `Microsoft.Logic/workflows` |
+| Managed Identity | `@azure/provisioning-managed-identity`, `@azure/provisioning-managedidentity` | `Microsoft.ManagedIdentity/userAssignedIdentities` |
+| Monitor alerts / diagnostic settings | `@azure/provisioning-monitor` | `Microsoft.Insights/metricAlerts` |
+| Networking | `@azure/provisioning-network` | `Microsoft.Network/virtualNetworks` |
+
+Application Insights and Log Analytics are published separately; the missing
+Monitor package does not make their published libraries unavailable.
+`@azure/provisioning-serialization`, `@azure/provisioning-serialization-ast`,
+and `@azure/provisioning-bicep` also returned 404, but are **replaced by core**,
+not missing capabilities: use its `/serialization` and `/internal` exports.
+
+### Refreshing the status
+
+Before a new dependency selection, verify the canonical package name and
+inspect the public registry metadata without installing it:
+
+```bash
+npm view @azure/provisioning-core dist-tags --json --registry=https://registry.npmjs.org
+npm view @azure/provisioning-storage@1.0.0-beta.1 version dependencies engines --json --registry=https://registry.npmjs.org
+```
+
+For a service absent from the table or a stale snapshot, check its canonical
+package name in the official Azure provisioning library documentation and query
+that name on npmjs. A confirmed public-registry 404 for the canonical service
+package selects the core fallback; a local missing dependency, authentication
+failure, registry override, timeout, or network error does not establish
+unpublished status. Report access errors explicitly. If a service package is
+newly published, inspect its declarations and compatibility before selecting it.
 
 ## Recommended layout
 
@@ -246,7 +331,10 @@ patch generated Bicep, round CPU to an integer, or change the approved sizing.
 ## Missing service provisioning libraries are not a raw-Bicep default
 
 Prefer the installed service-specific class. If that package/type is not
-published or does not cover the required resource, inspect the public
+published (see the [release status](#npmjs-release-status)), use the core fallback
+below rather than omitting the resource or changing the implementation method.
+If a published package does not cover the required resource, use the same
+fallback. Inspect the public
 `Resource` and `ResourceProps` declarations in the selected core provisioning library. Core
 `Resource` can keep the unsupported service in the same authored Stack,
 dependency/output graph, renderer and `deployment.provision` pipeline:

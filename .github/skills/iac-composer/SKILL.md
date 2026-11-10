@@ -5,7 +5,7 @@ license: MIT
 compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Azure execution requires Azure Developer CLI (azd) 1.30 or newer, Azure CLI, and authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.3"
+  version: "2.4"
 ---
 
 # Define infrastructure with iac-composer
@@ -84,6 +84,22 @@ Read [the direct authoring reference](./references/direct-authoring.md).
 Reuse existing provisioning-library code, custom compilers, and lifecycle
 helpers. Preserve the selected resource plan without redesigning it.
 
+## Provisioning library release selection
+
+Consult the dated [npmjs release status](./references/direct-authoring.md#npmjs-release-status)
+before choosing dependencies. Prefer the verified public service packages and
+their exact names, including `@azure/provisioning-appinsights` and
+`@azure/provisioning-containerregistry`. Recheck publication and compatibility
+when the snapshot is stale; a package missing locally is not unpublished.
+
+For services verified as not yet released on npmjs, use
+[`Resource` from core](./references/direct-authoring.md#missing-service-provisioning-libraries-are-not-a-raw-bicep-default)
+in the same Stack/render/`deployment.provision` pipeline. Do not install
+nonexistent, vendored, or obsolete service packages, or substitute handwritten
+Bicep/CLI provisioning merely because a service package is unpublished.
+Serialization, AST support, and Bicep rendering are included in core; do not
+add their old standalone packages.
+
 ## Required process
 
 ### 1. Inspect before editing
@@ -102,7 +118,7 @@ Identify:
 
 Do not replace a working project structure with a generic template.
 Before writing resource code, follow the reference's dependency bootstrap:
-declare and install the selected project-local runtime/core/service packages,
+declare and install the selected project-local runtime/core and published service packages,
 then resolve their actual types from the workspace. A CLI on `PATH` is not a
 project dependency. Empty provisioning library inventory, registry/access errors, and rejected
 out-of-workspace lookups are configuration problems, not proof that the provisioning library
@@ -129,9 +145,10 @@ inherited keys such as `toString` cannot be selected as components.
 
 - implement the provider-qualified Azure resource types and controls in the
   supplied plan;
-- use service-specific provisioning library constructs where available; when a service provisioning library/type
-  is unavailable, inspect core `Resource` before considering a narrowly
-  documented unsupported-control fallback;
+- use published service-specific provisioning library constructs where available;
+  for services not yet released on npmjs, use core `Resource` as documented in
+  the reference. Only a demonstrated core/renderer limitation warrants considering
+  a narrowly documented unsupported-control fallback;
 - default-export `defineDeployment(async (deployment) => { ... })`;
 - make each provisioning entrypoint export a non-empty `outputBicep` array of
   `{ path, contents }`, including the selected template and `.bicepparam`
