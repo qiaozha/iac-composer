@@ -5,7 +5,7 @@ license: MIT
 compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Use the installed iac-composer APIs and project commands for provisioning and deployment. Cloud execution requires authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.11"
+  version: "2.12"
 ---
 
 # Define infrastructure with iac-composer
@@ -201,6 +201,9 @@ Split the solution into components with clear owners:
 - provision each component immediately before its application lifecycle;
 - express cross-component dependencies through outputs and consume them only
   after their producer;
+- connect resource identities to their targets with least-privilege, scoped
+  role assignments; follow the
+  [role-assignment example](./references/direct-authoring.md#connect-resources-with-role-assignments);
 - keep environment preparation first and interactive or post-provisioning
   actions after their prerequisites.
 

@@ -557,6 +557,91 @@ graph with CLI calls. Data-plane initialization should use the
 application deployment, and bounded post-provisioning configuration also belong
 in guarded actions/helpers.
 
+## Connect resources with role assignments
+
+Connect resources by granting the consumer's managed identity the specific role
+it needs on the producer. This example lets an AI Search service index blobs
+from one private container using
+[Storage Blob Data Reader](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/storage#storage-blob-data-reader).
+It extends the provisioning example above: `stack`, `location`, `suffix`, and
+`storage` are its existing definitions. Add `@azure/provisioning-search` to the
+project's dependencies; reuse the existing storage and core packages.
+
+Authorization's provisioning package is not yet published in the
+[release snapshot](#npmjs-release-status), so the assignment uses core `Resource`
+with the supported role-assignment type and API version:
+
+```ts
+import { Resource } from "@azure/provisioning-core";
+import { SearchService } from "@azure/provisioning-search";
+import { BlobService, Container } from "@azure/provisioning-storage";
+
+const searchService = new SearchService(stack, {
+  name: fn.concat("appsearch-", suffix),
+  location,
+  sku: { name: "basic" },
+  identity: { type: "SystemAssigned" },
+  properties: {
+    replicaCount: 1,
+    partitionCount: 1,
+    disableLocalAuth: true,
+  },
+});
+const blobService = new BlobService(storage, {});
+const documents = new Container(blobService, {
+  name: "documents",
+  properties: { publicAccess: "None" },
+});
+
+const searchPrincipalId = searchService.identity.principalId;
+if (searchPrincipalId === undefined) {
+  throw new Error("The Search provisioning library did not expose identity.principalId.");
+}
+const blobReaderRoleId = "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1";
+const blobReaderRoleDefinitionId = fn.subscriptionResourceId(
+  "Microsoft.Authorization/roleDefinitions",
+  blobReaderRoleId,
+);
+new Resource(documents, {
+  type: "Microsoft.Authorization/roleAssignments",
+  apiVersion: "2022-04-01",
+  name: fn.guid(documents.id, searchPrincipalId, blobReaderRoleDefinitionId),
+  properties: {
+    roleDefinitionId: blobReaderRoleDefinitionId,
+    principalId: searchPrincipalId,
+    principalType: "ServicePrincipal",
+  },
+});
+
+stack.outputs.add("SEARCH_SERVICE_ID", "string", searchService.id);
+stack.outputs.add("SEARCH_PRINCIPAL_ID", "string", searchPrincipalId);
+stack.outputs.add("DOCUMENTS_CONTAINER_ID", "string", documents.id);
+```
+
+Keep the existing `export default defineProvisioning({ stack })` after these
+definitions, and provision the layer through `deployment.provision`.
+
+- `principalId` is the identity's Microsoft Entra **object ID**, not a client ID
+  or application ID. The guard checks the installed library's output shape;
+  the actual principal ID resolves during provisioning, not through a live lookup.
+- Constructing the assignment under `documents` scopes it to that container,
+  rather than the whole storage account or subscription. Resource references
+  connect its scope and principal to their producers and establish ordering.
+- The deterministic assignment name uses target ID, principal ID, and role
+  definition ID, so reruns reuse the same grant. Do not grant Owner/Contributor
+  when the workload only needs blob reads.
+- The deployment caller must already be authorized for
+  `Microsoft.Authorization/roleAssignments/write` at the target scope. This
+  grant authorizes the Search identity, not the caller's data-plane credential.
+- For separate layers, return the principal and target resource identifiers as
+  outputs and bind them as parameters in a later assignment layer; do not pass
+  expression handles across independent stacks.
+- RBAC is only the authorization part of the connection. Configure the Search
+  data source/indexer with managed identity through the JavaScript data-plane
+  clients, after provisioning. Verify network access and allow bounded RBAC
+  propagation retries; do not introduce account keys or bypass the firewall.
+  See the [Search-to-Storage connection guidance](https://learn.microsoft.com/azure/search/search-howto-managed-identities-storage).
+
 ## Data-plane operations with JavaScript SDKs
 
 Use provisioning libraries (or core `Resource`) for ARM resources and their

@@ -47,6 +47,7 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.match(skill, /fn\.json\("0\.25"\)/);
   assert.match(skill, /Default-export `defineProvisioning\(\{ stack \}\)`/);
   assert.match(skill, /Use `createParameterVariables` and `createGraphResource`/);
+  assert.match(skill, /references\/direct-authoring\.md#connect-resources-with-role-assignments/);
   assert.match(skill, /Runtime-managed files inside `\.generated` do not select a separate deployment\s+workflow/);
   assert.match(skill, /Do not load another deployment skill or invoke backend tools/);
   assert.match(skill, /using `deployment\.provision` for infrastructure and `deployment\.deploy` for\s+guarded application and data-plane actions/);
@@ -310,7 +311,7 @@ test("the skill distinguishes released npm libraries from services requiring cor
   assert.match(published, /Do not blindly select `latest`/);
 });
 
-test("documented provisioning library resources, fractional values and core Resource fallback typecheck and compile in a real CLI dry run", async (t) => {
+test("documented resources, scoped RBAC, fractional values and core fallback typecheck and compile in a CLI dry run", async (t) => {
   const consumer = await mkdtemp(join(tmpdir(), "iac-composer-authoring-contract-"));
   t.after(() => rm(consumer, { recursive: true, force: true }));
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
@@ -319,7 +320,8 @@ test("documented provisioning library resources, fractional values and core Reso
   const resources = blocks.find(block => block.includes("new StorageAccount"));
   const fallback = blocks.find(block => block.includes("new Resource(stack"));
   const fractional = blocks.find(block => block.includes("const containerResources"));
-  assert.ok(program && resources && fallback && fractional);
+  const roleAssignment = blocks.find(block => block.includes("const blobReaderRoleId"));
+  assert.ok(program && resources && fallback && fractional && roleAssignment);
   const fractionalResource = `
 ${fractional.replace('import { fn } from "@azure/provisioning-core";', "")}
 new Resource(stack, {
@@ -341,6 +343,7 @@ new Resource(stack, {
   const provisioning = resources.replace("export default defineProvisioning({ stack });", `
 ${fallback}
 ${fractionalResource}
+${roleAssignment.replace('import { Resource } from "@azure/provisioning-core";', "")}
 export default defineProvisioning({ stack });
 `);
   const directory = join(consumer, "deployment");
@@ -359,6 +362,7 @@ export default defineProvisioning({ stack });
       "iac-composer": `file:${root}`,
       "@azure/provisioning-core": dependencies["@azure/provisioning-core"],
       "@azure/provisioning-storage": dependencies["@azure/provisioning-storage"],
+      "@azure/provisioning-search": dependencies["@azure/provisioning-search"],
     },
   }));
   await symlink(resolve(root, "examples/chatbot/node_modules"), join(consumer, "node_modules"), "dir");
@@ -394,6 +398,19 @@ export default defineProvisioning({ stack });
   assert.match(generated, /cpu:\s*json\('0\.25'\)/);
   assert.match(generated, /output NETWORK_ID string/);
   assert.match(generated, /output STORAGE_ACCOUNT_NAME string/);
+  const grant = generated.match(
+    /resource \w+ 'Microsoft\.Authorization\/roleAssignments@2022-04-01' = \{[\s\S]*?^\}/m,
+  )?.[0];
+  assert.ok(grant);
+  assert.match(grant, /scope: container/);
+  assert.match(grant, /principalId: searchService\.identity\.principalId/);
+  assert.match(grant, /principalType: 'ServicePrincipal'/);
+  assert.match(grant, /name: guid\(container\.id, searchService\.identity\.principalId, subscriptionResourceId\(/);
+  assert.match(grant, /2a2b9908-6ea1-4ae2-8e65-a410df84e7d1/);
+  assert.doesNotMatch(grant, /scope: resourceGroup|clientId|appId/);
+  assert.match(generated, /resource searchService 'Microsoft\.Search\/searchServices@/);
+  assert.match(generated, /type: 'SystemAssigned'/);
+  assert.match(generated, /output SEARCH_PRINCIPAL_ID string = searchService\.identity\.principalId/);
   await assert.rejects(access(marker), { code: "ENOENT" });
 });
 
