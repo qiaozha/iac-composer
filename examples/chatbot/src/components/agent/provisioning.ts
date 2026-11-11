@@ -1,4 +1,4 @@
-import { defineProvisioning, loopResource } from "iac-composer";
+import { loopResource } from "iac-composer";
 
 import { Stack, type Expression, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
@@ -383,49 +383,48 @@ stack.outputs.add(
   botIdentity.properties.tenantId as any,
 );
 
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable(
-      "AZURE_AI_DEPLOYMENTS_LOCATION",
-      fn.readEnvironmentVariable(
-        "AZURE_AI_LOCATION",
-        fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-      ),
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable(
+    "AZURE_AI_DEPLOYMENTS_LOCATION",
+    fn.readEnvironmentVariable(
+      "AZURE_AI_LOCATION",
+      fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
     ),
-    botIdentityLocation: fn.readEnvironmentVariable(
-      "AZURE_LOCATION",
-      "westus2",
-    ),
-    botIdentityName: fn.readEnvironmentVariable(
-      "BOT_IDENTITY_NAME",
-      fn.readEnvironmentVariable("FRONTEND_SITE_NAME", ""),
-    ),
-    managedIdentityPrincipalId: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_PRINCIPAL_ID",
-    ),
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
-    storageBlobEndpoint: fn.readEnvironmentVariable("STORAGE_BLOB_ENDPOINT"),
-    containerRegistryName: fn.readEnvironmentVariable(
-      "CONTAINER_REGISTRY_NAME",
-    ),
-    developerGroupObjectId: fn.readEnvironmentVariable(
-      "DEVELOPER_PRINCIPAL_ID",
-      "",
-    ),
-    developerPrincipalType: fn.readEnvironmentVariable(
-      "DEVELOPER_PRINCIPAL_TYPE",
-      "User",
-    ),
-    agentLogWorkspaceName: fn.readEnvironmentVariable(
-      "AGENT_LOG_WORKSPACE_NAME",
-      "",
-    ),
-    agentAppInsightsName: fn.readEnvironmentVariable(
-      "AGENT_APP_INSIGHTS_NAME",
-      "",
-    ),
-    aiResourceName: fn.readEnvironmentVariable("AI_RESOURCE_NAME", ""),
-    aiProjectName: fn.readEnvironmentVariable("AI_PROJECT_NAME", ""),
-  },
-});
+  ),
+  botIdentityLocation: fn.readEnvironmentVariable(
+    "AZURE_LOCATION",
+    "westus2",
+  ),
+  botIdentityName: fn.readEnvironmentVariable(
+    "BOT_IDENTITY_NAME",
+    fn.readEnvironmentVariable("FRONTEND_SITE_NAME", ""),
+  ),
+  managedIdentityPrincipalId: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_PRINCIPAL_ID",
+  ),
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
+  storageBlobEndpoint: fn.readEnvironmentVariable("STORAGE_BLOB_ENDPOINT"),
+  containerRegistryName: fn.readEnvironmentVariable(
+    "CONTAINER_REGISTRY_NAME",
+  ),
+  developerGroupObjectId: fn.readEnvironmentVariable(
+    "DEVELOPER_PRINCIPAL_ID",
+    "",
+  ),
+  developerPrincipalType: fn.readEnvironmentVariable(
+    "DEVELOPER_PRINCIPAL_TYPE",
+    "User",
+  ),
+  agentLogWorkspaceName: fn.readEnvironmentVariable(
+    "AGENT_LOG_WORKSPACE_NAME",
+    "",
+  ),
+  agentAppInsightsName: fn.readEnvironmentVariable(
+    "AGENT_APP_INSIGHTS_NAME",
+    "",
+  ),
+  aiResourceName: fn.readEnvironmentVariable("AI_RESOURCE_NAME", ""),
+  aiProjectName: fn.readEnvironmentVariable("AI_PROJECT_NAME", ""),
+};
+
+export default stack;

@@ -1,4 +1,4 @@
-import { createParameterVariables, defineProvisioning } from "iac-composer";
+import { createParameterVariables } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -511,75 +511,74 @@ const { env, deployedFrontendImage } = createParameterVariables(
     ),
   },
 );
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-    envName: env,
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
-    containerRegistryName: fn.readEnvironmentVariable(
-      "CONTAINER_REGISTRY_NAME",
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
+  envName: env,
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
+  containerRegistryName: fn.readEnvironmentVariable(
+    "CONTAINER_REGISTRY_NAME",
+  ),
+  frontendImageRepository: fn.cond(
+    fn.not(fn.empty(deployedFrontendImage)),
+    fn.last(fn.split(deployedFrontendImage, "/")),
+    fn.readEnvironmentVariable(
+      "FRONTEND_IMAGE_REPOSITORY",
+      fn.concat("azure-sdk-qa-bot:", env),
     ),
-    frontendImageRepository: fn.cond(
-      fn.not(fn.empty(deployedFrontendImage)),
-      fn.last(fn.split(deployedFrontendImage, "/")),
-      fn.readEnvironmentVariable(
-        "FRONTEND_IMAGE_REPOSITORY",
-        fn.concat("azure-sdk-qa-bot:", env),
-      ),
-    ),
-    serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
-    ragServiceScope: fn.readEnvironmentVariable("RAG_SERVICE_SCOPE"),
-    botIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
-    frontendBaseName: fn.readEnvironmentVariable("FRONTEND_SITE_NAME", ""),
-    frontendAppInsightsName: fn.readEnvironmentVariable(
-      "FRONTEND_APP_INSIGHTS_NAME",
-      "",
-    ),
-    frontendEmailActionGroupName: fn.readEnvironmentVariable(
-      "FRONTEND_EMAIL_ACTION_GROUP_NAME",
-      "",
-    ),
-    frontendDiagnosticSettingName: fn.readEnvironmentVariable(
-      "FRONTEND_DIAGNOSTIC_SETTING_NAME",
-      "",
-    ),
-    frontendHealthTestName: fn.readEnvironmentVariable(
-      "FRONTEND_HEALTH_TEST_NAME",
-      "",
-    ),
-    frontendServerErrorsAlertName: fn.readEnvironmentVariable(
-      "FRONTEND_SERVER_ERRORS_ALERT_NAME",
-      "",
-    ),
-    frontendHealthCheckAlertName: fn.readEnvironmentVariable(
-      "FRONTEND_HEALTH_CHECK_ALERT_NAME",
-      "",
-    ),
-    frontendDeleteLockName: fn.readEnvironmentVariable(
-      "FRONTEND_DELETE_LOCK_NAME",
-      "",
-    ),
-    azureTableNameForConversation: fn.readEnvironmentVariable(
-      "AZURE_TABLE_NAME_FOR_CONVERSATION",
-      "",
-    ),
-    teamsBotFullDisplayName: fn.readEnvironmentVariable(
-      "TEAMS_BOT_FULL_DISPLAY_NAME",
-      "",
-    ),
-    githubAppId: fn.readEnvironmentVariable("GITHUB_APP_ID", "1086291"),
-    githubAppKeyVaultName: fn.readEnvironmentVariable(
-      "GITHUB_APP_KEY_VAULT_NAME",
-      "azuresdkengkeyvault",
-    ),
-    githubAppKeyName: fn.readEnvironmentVariable(
-      "GITHUB_APP_KEY_NAME",
-      "azure-sdk-automation",
-    ),
-    githubAppInstallOwner: fn.readEnvironmentVariable(
-      "GITHUB_APP_INSTALL_OWNER",
-      "Azure",
-    ),
-  },
-});
+  ),
+  serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
+  ragServiceScope: fn.readEnvironmentVariable("RAG_SERVICE_SCOPE"),
+  botIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
+  frontendBaseName: fn.readEnvironmentVariable("FRONTEND_SITE_NAME", ""),
+  frontendAppInsightsName: fn.readEnvironmentVariable(
+    "FRONTEND_APP_INSIGHTS_NAME",
+    "",
+  ),
+  frontendEmailActionGroupName: fn.readEnvironmentVariable(
+    "FRONTEND_EMAIL_ACTION_GROUP_NAME",
+    "",
+  ),
+  frontendDiagnosticSettingName: fn.readEnvironmentVariable(
+    "FRONTEND_DIAGNOSTIC_SETTING_NAME",
+    "",
+  ),
+  frontendHealthTestName: fn.readEnvironmentVariable(
+    "FRONTEND_HEALTH_TEST_NAME",
+    "",
+  ),
+  frontendServerErrorsAlertName: fn.readEnvironmentVariable(
+    "FRONTEND_SERVER_ERRORS_ALERT_NAME",
+    "",
+  ),
+  frontendHealthCheckAlertName: fn.readEnvironmentVariable(
+    "FRONTEND_HEALTH_CHECK_ALERT_NAME",
+    "",
+  ),
+  frontendDeleteLockName: fn.readEnvironmentVariable(
+    "FRONTEND_DELETE_LOCK_NAME",
+    "",
+  ),
+  azureTableNameForConversation: fn.readEnvironmentVariable(
+    "AZURE_TABLE_NAME_FOR_CONVERSATION",
+    "",
+  ),
+  teamsBotFullDisplayName: fn.readEnvironmentVariable(
+    "TEAMS_BOT_FULL_DISPLAY_NAME",
+    "",
+  ),
+  githubAppId: fn.readEnvironmentVariable("GITHUB_APP_ID", "1086291"),
+  githubAppKeyVaultName: fn.readEnvironmentVariable(
+    "GITHUB_APP_KEY_VAULT_NAME",
+    "azuresdkengkeyvault",
+  ),
+  githubAppKeyName: fn.readEnvironmentVariable(
+    "GITHUB_APP_KEY_NAME",
+    "azure-sdk-automation",
+  ),
+  githubAppInstallOwner: fn.readEnvironmentVariable(
+    "GITHUB_APP_INSTALL_OWNER",
+    "Azure",
+  ),
+};
+
+export default stack;

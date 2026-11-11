@@ -18,7 +18,6 @@ type CoreRuntime = Pick<
   typeof import("@azure/provisioning-core/internal"),
   "renderBicepFiles" | "wrapExpression" | "unwrapExpression"
 > & Pick<typeof import("@azure/provisioning-core"), "isExpression">;
-const definitionBrand = Symbol.for("iac-composer.provisioning");
 
 export interface GraphResourceDefinition {
   readonly identifier: string;
@@ -67,16 +66,11 @@ export interface ResourceLoopOptions<TItem> {
   create(item: Expression<TItem>): Resource;
 }
 
-export interface ProvisioningSource {
-  readonly stack: Stack;
-  readonly parameters?: Readonly<Record<string, VariableValue>>;
+export interface ProvisioningSettings {
+  readonly parameterBindings?: Readonly<Record<string, VariableValue>>;
   readonly parameterVariables?: Readonly<Record<string, VariableValue>>;
   readonly graphResources?: readonly GraphResourceDefinition[];
 }
-
-export type ProvisioningDefinition = ProvisioningSource & {
-  readonly [definitionBrand]: true;
-};
 
 interface ResourceLoop {
   resource: Resource;
@@ -171,28 +165,40 @@ export function createGraphResource(
   return handle;
 }
 
-export function defineProvisioning(source: ProvisioningSource): ProvisioningDefinition {
-  if (!source?.stack || typeof source.stack.parameters?.listMetadata !== "function") {
-    throw provisioningError("PROVISIONING_DEFINITION_INVALID", "stack", "A provisioning definition requires an authored Stack.");
+export function isProvisioningStack(value: unknown): value is Stack {
+  return typeof value === "object" && value !== null &&
+    "name" in value && typeof value.name === "string" &&
+    "getResources" in value && typeof value.getResources === "function" &&
+    "parameters" in value && hasCollectionMethods(value.parameters) &&
+    "listMetadata" in value.parameters && typeof value.parameters.listMetadata === "function" &&
+    "variables" in value && hasCollectionMethods(value.variables) &&
+    "listMetadata" in value.variables && typeof value.variables.listMetadata === "function" &&
+    "outputs" in value && hasCollectionMethods(value.outputs);
+}
+
+function hasCollectionMethods(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null &&
+    ["add", "has", "list", "delete"].every(
+      (method) => method in value && typeof Reflect.get(value, method) === "function",
+    );
+}
+
+export function validateProvisioningSettings(source: unknown): asserts source is ProvisioningSettings {
+  if (typeof source !== "object" || source === null || Array.isArray(source)) {
+    throw provisioningError("PROVISIONING_DEFINITION_INVALID", "settings", "Stack settings must be an object.");
   }
   for (const [group, values] of [
-    ["parameters", source.parameters],
-    ["parameterVariables", source.parameterVariables],
+    ["parameterBindings", "parameterBindings" in source ? source.parameterBindings : undefined],
+    ["parameterVariables", "parameterVariables" in source ? source.parameterVariables : undefined],
   ] as const) {
     if (values !== undefined && (values === null || typeof values !== "object" || Array.isArray(values))) {
       throw provisioningError("PROVISIONING_DEFINITION_INVALID", group, `${group} must be a named value map.`);
     }
     for (const name of Object.keys(values ?? {})) validateIdentifier(name);
   }
-  if (source.graphResources !== undefined && !Array.isArray(source.graphResources)) {
+  if ("graphResources" in source && source.graphResources !== undefined && !Array.isArray(source.graphResources)) {
     throw provisioningError("PROVISIONING_DEFINITION_INVALID", "graphResources", "Graph resources must be an array.");
   }
-  return { ...source, [definitionBrand]: true };
-}
-
-export function isProvisioningDefinition(value: unknown): value is ProvisioningDefinition {
-  return typeof value === "object" && value !== null &&
-    definitionBrand in value && value[definitionBrand] === true;
 }
 
 export function loopResource<TItem extends VariableValue>(
@@ -255,12 +261,17 @@ export function loopResource<TItem extends VariableValue>(
   return resource;
 }
 
-export async function renderProvisioningDefinition(
-  definition: ProvisioningDefinition,
+export async function renderProvisioningStack(
+  stack: Stack,
   entrypoint: string,
   requiredFiles: readonly string[],
   overrides: Readonly<Record<string, string | number | boolean>>,
+  settings: ProvisioningSettings = {},
 ): Promise<readonly RenderedBicepFile[]> {
+  if (!isProvisioningStack(stack)) {
+    throw provisioningError("PROVISIONING_DEFINITION_INVALID", "stack", "Provisioning requires an authored Stack.");
+  }
+  validateProvisioningSettings(settings);
   let internal: unknown;
   let core: unknown;
   try {
@@ -281,18 +292,17 @@ export async function renderProvisioningDefinition(
     throw provisioningError("PROVISIONING_CORE_INCOMPATIBLE", entrypoint, "The selected core must expose compatible rendering and expression APIs.");
   }
   const runtime: CoreRuntime = { ...internal, isExpression: core.isExpression };
-  const { stack } = definition;
   const template = requiredFiles[0] ?? `${stack.name}.bicep`;
   const parameterPath = requiredFiles[1] ?? template.replace(/\.bicep$/, ".bicepparam");
-  const parameters = new Map(Object.entries(definition.parameters ?? {}));
+  const parameters = new Map(Object.entries(settings.parameterBindings ?? {}));
   for (const name of [...parameters.keys(), ...Object.keys(overrides)]) {
     if (!stack.parameters.has(name)) {
       throw provisioningError("PROVISIONING_PARAMETER_UNKNOWN", name, `Stack '${stack.name}' does not declare parameter '${name}'.`);
     }
   }
   for (const parameter of stack.parameters.listMetadata()) {
-    if (!parameters.has(parameter.name) &&
-        (parameter.defaultValue === undefined || Object.hasOwn(overrides, parameter.name))) {
+    if (Object.hasOwn(overrides, parameter.name) ||
+        (!parameters.has(parameter.name) && parameter.defaultValue === undefined)) {
       parameters.set(parameter.name, runtime.wrapExpression({
         kind: "fn-call", operator: "readEnvironmentVariable", args: [`IAC_COMPOSER_PARAM_${parameter.name}`],
       }));
@@ -303,14 +313,14 @@ export async function renderProvisioningDefinition(
   }
   const parameterEntries = [...parameters];
   const variables = new Map(parameterVariables.get(stack));
-  for (const [name, value] of Object.entries(definition.parameterVariables ?? {})) {
+  for (const [name, value] of Object.entries(settings.parameterVariables ?? {})) {
     if ([...variables.keys()].some((existing) => existing.toLowerCase() === name.toLowerCase())) {
       throw provisioningError("PROVISIONING_REFERENCE_CONFLICT", name, "A parameter variable cannot be declared through both the typed API and a raw value map.");
     }
     variables.set(name, value);
   }
   const variableEntries = [...variables];
-  const graphResources = [...registeredGraphResources.get(stack) ?? [], ...definition.graphResources ?? []];
+  const graphResources = [...registeredGraphResources.get(stack) ?? [], ...settings.graphResources ?? []];
   const graphValues = graphResources.flatMap((resource) => [
     resource.body,
     ...(resource.condition === undefined ? [] : [resource.condition]),

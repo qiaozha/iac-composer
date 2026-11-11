@@ -19,8 +19,9 @@ JavaScript entrypoints are also supported.
 1. **Define resources in TypeScript.** Build stacks with the JavaScript
    provisioning libraries and the resource-specific `@azure/provisioning-*`
    packages your infrastructure needs.
-2. **Expose provisioning output.** Render the stack to Bicep and export
-   `outputBicep`, or provide a custom compiler and its artifact directory.
+2. **Pass the stack directly.** Supply it to `deployment.provision`, or
+   default-export it from a resource entrypoint. The runtime generates the
+   deployment artifacts; no definition wrapper is needed.
 3. **Compose your deployment.** Write a TypeScript program that provisions
    stacks in your chosen order and passes outputs to dependent steps.
 4. **Preview and deploy.** Use `--dry-run` to compile and inspect local artifacts,
@@ -38,8 +39,8 @@ flowchart TD
     end
 
     program --> runtime["iac-composer<br/>Execute steps in authored order"]
-    infra --> libraries["Azure JavaScript provisioning libraries<br/>Build stacks and render outputBicep"]
-    runtime -->|"Load provisioning entrypoint"| libraries
+    infra --> libraries["Azure JavaScript provisioning libraries<br/>Build stacks and render Bicep"]
+    runtime -->|"Read stack or load resource entrypoint"| libraries
     libraries --> artifacts["Generated deployment artifacts<br/>Bicep, parameters, azd project"]
 
     artifacts --> mode{"Execution mode"}
@@ -69,23 +70,28 @@ program in order.
 
 ```ts
 import { defineDeployment, requiredEnv } from "iac-composer";
+import stack from "./infra.js";
 
 export default defineDeployment(async (deployment) => {
   const outputs = await deployment.provision("infrastructure", {
-    entrypoint: "./infra.ts",
+    stack,
     outputDirectory: ".generated/infrastructure",
     scope: "resourceGroup",
     resourceGroup: requiredEnv("AZURE_RESOURCE_GROUP"),
     subscription: requiredEnv("AZURE_SUBSCRIPTION_ID"),
     location: requiredEnv("AZURE_LOCATION"),
+    parameters: { location: requiredEnv("AZURE_LOCATION") },
   });
 
   await deployment.env("publish infrastructure outputs", outputs);
 });
 ```
 
-Here, `infra.ts` contains your resource definitions built with the provisioning
-libraries. For a complete example, see the chatbot's
+Here, `infra.ts` default-exports a provisioning-library `Stack`. Alternatively,
+use `entrypoint: "./infra.ts"` instead of `stack` to load it at the provisioning
+step. Resource creation and application deployment remain separate operations:
+`deployment.provision` handles infrastructure; `deployment.deploy` guards
+application actions. For a complete example, see the chatbot's
 [TypeScript provisioning stack](examples/chatbot/src/components/shared/provisioning.ts)
 and [deployment program](examples/chatbot/src/deploy.ts).
 
@@ -265,14 +271,13 @@ Install the provisioning packages your code imports in your own project. Keep
 the TypeScript definitions as the source of truth; Bicep and parameter files
 are build artifacts.
 
-Default-export a stack definition from a provisioning entrypoint. The runtime
+Default-export the stack itself from a provisioning entrypoint. The runtime
 loads the core library from that entrypoint's project, compiles the stack,
 preserves its complete module layout, and creates the parameter file internally:
 
 ```ts
 import { Stack } from "@azure/provisioning-core";
 import { StorageAccount } from "@azure/provisioning-storage";
-import { defineProvisioning } from "iac-composer";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
@@ -283,15 +288,21 @@ const storage = new StorageAccount(stack, {
   sku: { name: "Standard_LRS" },
 });
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
-export default defineProvisioning({ stack });
+export default stack;
 ```
 
 Call `deployment.provision("storage", { entrypoint: "./infra.ts",
 outputDirectory: ".generated/storage", parameters: { location: "eastus" } })`.
-Required parameters get runtime-managed environment bindings; optional stack
-defaults are retained unless overridden. The definition can supply
-`parameters` and `parameterVariables` for existing environment expressions,
-and `graphResources` for Graph declarations. The runtime's `loopResource`
+Or import the stack and call `deployment.provision("storage", { stack,
+outputDirectory: ".generated/storage", parameters: { location: "eastus" } })`.
+For direct stacks the runtime resolves core from the deployment working
+directory; entrypoints resolve it from their own project. Required parameters
+get runtime-managed environment bindings; optional stack defaults are retained
+unless overridden. Advanced entrypoints can export named `parameterBindings`
+and `parameterVariables` for environment expressions, and `graphResources`
+for Graph declarations. Supply those same settings alongside `stack` for
+direct calls. Runtime `parameters` override authored bindings without embedding
+their values in generated source. The runtime's `loopResource`
 helper preserves sequential updates without application-owned rendering.
 Prefer `createParameterVariables(stack, values)` for inferred variable handles
 and `createGraphResource(stack, definition)` for Graph property and dependency
@@ -314,7 +325,7 @@ await deployment.provision("resources", {
 });
 ```
 
-Choose exactly one provisioning source: `layer`, `entrypoint`, or a `compiler`
+Choose exactly one provisioning source: `stack`, `layer`, `entrypoint`, or a `compiler`
 with `artifactsDirectory`. Source conflicts are rejected before compiler
 execution. Provisioning checks that the selected template and parameters files
 were emitted (defaults: `main.bicep` and `main.bicepparam`). Artifact paths must
@@ -323,6 +334,15 @@ directory, with no file/directory conflicts. These checks happen before replacin
 previous artifacts, so invalid rendered output does not erase the last valid
 layer. This is input preflight, not a fully transactional file installation:
 filesystem failures during writing can still require regeneration.
+
+### Migrating resource entrypoints
+
+This is a breaking API change: `defineProvisioning` has been removed.
+Replace its default-exported wrapper with `export default stack`. Move its
+`parameters` map to a named `parameterBindings` export, and its optional
+`parameterVariables` and `graphResources` to named exports. The deployment
+program and its `deployment.provision` calls can keep using entrypoint paths,
+or pass the stack directly.
 
 The runtime records all layered artifact paths in the single
 `.generated/.iac-composer-generated.json` manifest and only replaces files under
@@ -346,7 +366,7 @@ There are no separate serialization, serialization-AST, or Bicep packages.
 Until all service provisioning libraries are published, the example's
 [provisioning helper](examples/chatbot/src/runtime/provisioning.ts) defines
 unavailable resources with typed core `Resource` subclasses. Entry modules
-default-export `defineProvisioning` definitions; iac-composer handles compilation,
+default-export stacks; iac-composer handles compilation,
 parameter bindings, Graph extension resources, and sequential model updates.
 Install them with:
 

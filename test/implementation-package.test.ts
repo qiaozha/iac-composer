@@ -99,7 +99,6 @@ test("the packed runtime implements discovery and provisioning library authoring
     assert.match(JSON.stringify(sdk.structuredContent), /constructor/);
     await writeFile(join(workspace, "infra.ts"), `
 import { Stack, fn } from "@azure/provisioning-core";
-import { defineProvisioning } from "iac-composer";
 import { StorageAccount } from "@azure/provisioning-storage";
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
@@ -109,14 +108,15 @@ const storage = new StorageAccount(stack, {
   properties: { minimumTlsVersion: "TLS1_2", allowBlobPublicAccess: false, allowSharedKeyAccess: false, enableHttpsTrafficOnly: true }
 });
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
-export default defineProvisioning({ stack });`);
+export default stack;`);
     await writeFile(join(workspace, "deploy.ts"), `
 import { defineDeployment, ensureResourceGroup, requiredEnv } from "iac-composer";
+import stack from "./infra.js";
 export default defineDeployment(async (d) => {
   await d.deploy("ensure resource group", async () => {
     await ensureResourceGroup(d, { name: requiredEnv("AZURE_RESOURCE_GROUP"), location: requiredEnv("AZURE_LOCATION"), subscription: requiredEnv("AZURE_SUBSCRIPTION_ID") });
   });
-  const outputs = await d.provision("archive storage", { entrypoint: "./infra.ts", outputDirectory: ".generated/storage", parameters: { location: requiredEnv("AZURE_LOCATION") } });
+  const outputs = await d.provision("archive storage", { stack, outputDirectory: ".generated/storage", parameters: { location: requiredEnv("AZURE_LOCATION") } });
   await d.env("publish outputs", outputs);
 });`);
     await execFileAsync(process.execPath, [

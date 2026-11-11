@@ -1,5 +1,3 @@
-import { defineProvisioning } from "iac-composer";
-
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -567,38 +565,37 @@ for (const [name, value] of outputs) {
   stack.outputs.add(name, "string", value);
 }
 
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-    cosmosDbLocation: fn.readEnvironmentVariable(
-      "COSMOS_DB_LOCATION",
-      fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-    ),
-    developerGroupObjectId: fn.readEnvironmentVariable(
-      "DEVELOPER_PRINCIPAL_ID",
-      "",
-    ),
-    developerPrincipalType: fn.readEnvironmentVariable(
-      "DEVELOPER_PRINCIPAL_TYPE",
-      "User",
-    ),
-    managedIdentityName: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_NAME",
-      "",
-    ),
-    actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME", ""),
-    keyVaultName: fn.readEnvironmentVariable("KEY_VAULT_NAME", ""),
-    appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME", ""),
-    searchServiceName: fn.readEnvironmentVariable("SEARCH_SERVICE_NAME", ""),
-    containerRegistryName: fn.readEnvironmentVariable(
-      "CONTAINER_REGISTRY_NAME",
-      "",
-    ),
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME", ""),
-    cosmosDbAccountName: fn.readEnvironmentVariable(
-      "COSMOSDB_ACCOUNT_NAME",
-      "",
-    ),
-  },
-});
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
+  cosmosDbLocation: fn.readEnvironmentVariable(
+    "COSMOS_DB_LOCATION",
+    fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
+  ),
+  developerGroupObjectId: fn.readEnvironmentVariable(
+    "DEVELOPER_PRINCIPAL_ID",
+    "",
+  ),
+  developerPrincipalType: fn.readEnvironmentVariable(
+    "DEVELOPER_PRINCIPAL_TYPE",
+    "User",
+  ),
+  managedIdentityName: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_NAME",
+    "",
+  ),
+  actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME", ""),
+  keyVaultName: fn.readEnvironmentVariable("KEY_VAULT_NAME", ""),
+  appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME", ""),
+  searchServiceName: fn.readEnvironmentVariable("SEARCH_SERVICE_NAME", ""),
+  containerRegistryName: fn.readEnvironmentVariable(
+    "CONTAINER_REGISTRY_NAME",
+    "",
+  ),
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME", ""),
+  cosmosDbAccountName: fn.readEnvironmentVariable(
+    "COSMOSDB_ACCOUNT_NAME",
+    "",
+  ),
+};
+
+export default stack;

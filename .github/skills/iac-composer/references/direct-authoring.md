@@ -38,7 +38,13 @@ preserving unrelated user changes.
    runtime is private/unpublished. A runtime registry 404 is a package-source blocker,
    not authorization to replace the selected provisioning API. Never persist an
    absolute host path such as `/opt/.../iac-composer/dist/index.js`.
-3. Inventory the actual project, then request only the declarations needed:
+3. Inspect only the installed declarations needed. MCP is optional: without it,
+   use `import.meta.resolve("iac-composer")` from the authored project to locate
+   the runtime and package exports, then targeted file/symbol searches and
+   bounded `.d.ts` reads. `npm ls --depth=0` can verify declared dependencies
+   once; do not repeatedly dump package inventories or complete declaration
+   files. The local CLI, typecheck and dry run work without an MCP server.
+   When MCP is already available, request only the declarations needed:
 
    ```json
    {"topic":"sdk","projectDirectory":"."}
@@ -269,7 +275,7 @@ contexts share layer-order tracking and step events. Separate
 The empty parameter placeholder above is only for compilation during dry runs,
 where provisioning returns no live outputs; the guarded prerequisite check
 rejects it during a real run. Do not turn missing live outputs into success.
-Define `subnetId` with `stack.parameters.add` in a `defineProvisioning` entrypoint;
+Define `subnetId` with `stack.parameters.add` in a resource entrypoint;
 the runtime generates its binding and the API supplies earlier outputs. Avoid reading outputs,
 credentials or service data at provisioning-module import time: imports can be
 cached and compile/preview must remain free of live side effects.
@@ -300,8 +306,7 @@ imports; do not parallelize calls that share layer/manifests or depend on output
 | API | Purpose | Dry-run behavior |
 | --- | --- | --- |
 | `defineDeployment(program)` | Marks the default deployment program. | The program still runs so steps can be discovered. |
-| `defineProvisioning({ stack, ... })` | Declares a resource entrypoint loaded by `deployment.provision`, not a CLI deployment program. | The runtime compiles its resources without provisioning them. |
-| `deployment.provision(name, options)` | Compiles and provisions the selected infrastructure layer and returns string outputs. | Compiles and writes local artifacts; cloud provisioning is skipped. |
+| `deployment.provision(name, options)` | Accepts a direct `stack` or a resource entrypoint, compiles and provisions the infrastructure, and returns string outputs. | Compiles and writes local artifacts; cloud provisioning is skipped. |
 | `deployment.deploy(name, action)` | Runs an application, configuration, or post-provisioning side effect. | Logs the step and skips the action. |
 | `deployment.run(name, command)` | Runs a named command step. | Logs the step and skips the command. |
 | `deployment.env(name, values)` | Applies process environment values in sequence. | Logs the step and skips the mutation. |
@@ -314,9 +319,9 @@ shell. Keep each argument separate; do not build shell command strings.
 
 The CLI deployment program must default-export
 `defineDeployment(async (deployment) => { ... })`. Its resource entrypoints
-default-export `defineProvisioning({ stack })` and are loaded through
+default-export the `Stack` itself and are loaded through
 `deployment.provision`, not passed directly to the CLI.
-`defineProvisioning` does not replace the deployment program's default export.
+A Stack export does not replace the deployment program's default export.
 Service modules export named lifecycle functions that the program awaits.
 
 ## Minimal deployment program
@@ -359,15 +364,14 @@ This example uses an existing authorized resource group. Add an
 ## Provisioning resource definitions
 
 Define resources with the Azure JavaScript provisioning libraries and
-default-export `defineProvisioning({ stack })` from the layer entrypoint.
+default-export the `Stack` itself from the layer entrypoint.
 `deployment.provision` handles compilation and parameter binding internally.
-Inspect the installed `ProvisioningSource`, `ProvisioningLayer`, and
+Inspect the installed `ProvisioningSettings`, `ProvisioningLayer`, and
 `ProvisionOptions` declarations when wiring a new layer.
 
 ```ts
 import { fn, Stack } from "@azure/provisioning-core";
 import { StorageAccount } from "@azure/provisioning-storage";
-import { defineProvisioning } from "iac-composer";
 
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 const location = stack.parameters.add("location", "string");
@@ -391,8 +395,35 @@ const storage = new StorageAccount(stack, {
 
 stack.outputs.add("STORAGE_ACCOUNT_NAME", "string", storage.name);
 
-export default defineProvisioning({ stack });
+export default stack;
 ```
+
+For a direct call, import this stack into the deployment program and supply it
+instead of an entrypoint or layer. Keep the same scope and configuration:
+
+```ts
+import stack from "./infra.js";
+import { defineDeployment, requiredEnv } from "iac-composer";
+
+export default defineDeployment(async (deployment) => {
+  const outputs = await deployment.provision("core infrastructure", {
+    stack,
+    outputDirectory: ".generated/core",
+    scope: "resourceGroup",
+    resourceGroup: requiredEnv("AZURE_RESOURCE_GROUP"),
+    subscription: requiredEnv("AZURE_SUBSCRIPTION_ID"),
+    location: requiredEnv("AZURE_LOCATION"),
+    parameters: { location: requiredEnv("AZURE_LOCATION") },
+  });
+  await deployment.env("publish infrastructure outputs", outputs);
+});
+```
+
+Direct calls resolve core from the deployment working directory; entrypoint
+calls resolve it from the entrypoint's project. Use a matching project context
+for the stack's installed libraries. Both paths use the same compilation and
+provisioning pipeline. A direct stack is not an application action: never nest
+its provisioning inside `deployment.deploy`.
 
 Use the provisioning packages and versions already selected by the target
 repository. Add only the resource-specific packages that the entrypoint imports.
@@ -407,22 +438,23 @@ to declare values and obtain handles for their actual names and inferred shapes.
 The runtime registers their definitions automatically:
 
 ```ts
-import { createParameterVariables, defineProvisioning } from "iac-composer";
+import { createParameterVariables } from "iac-composer";
 
 const { environment, settings } = createParameterVariables(stack, {
   environment: "dev",
   settings: { replicas: 1 },
 });
-export default defineProvisioning({
-  stack,
-  parameters: {
-    environmentName: environment,
-    replicas: settings.replicas,
-  },
-});
+export const parameterBindings = {
+  environmentName: environment,
+  replicas: settings.replicas,
+};
+export default stack;
 ```
 
 Here `stack` declares `environmentName` and `replicas` as provisioning parameters.
+Optional `parameterVariables` and `graphResources` are also named exports.
+For direct stacks, supply these settings alongside `stack` in the provisioning
+call. Runtime `parameters` override authored `parameterBindings`.
 The handles are deferred expressions, not live service data or local values.
 Use them only in parameter bindings and other parameter-variable declarations,
 not resource-template properties. Unknown variable names and nested fields are
@@ -618,7 +650,7 @@ stack.outputs.add("SEARCH_PRINCIPAL_ID", "string", searchPrincipalId);
 stack.outputs.add("DOCUMENTS_CONTAINER_ID", "string", documents.id);
 ```
 
-Keep the existing `export default defineProvisioning({ stack })` after these
+Keep the existing `export default stack` after these
 definitions, and provision the layer through `deployment.provision`.
 
 - `principalId` is the identity's Microsoft Entra **object ID**, not a client ID
@@ -747,16 +779,20 @@ without contacting Azure; perform real data operations only when authorized.
 `deployment.provision` accepts:
 
 - `layer`: an `entrypoint` and `outputDirectory` pair;
-- `entrypoint`: a module default-exporting `defineProvisioning({ stack, ... })`;
+- `stack`: the authored `Stack` directly;
+- `entrypoint`: a module default-exporting the authored `Stack`;
 - `outputDirectory`: standalone output or a `.generated/<layer>` directory;
 - `deploymentName`, `subscription`, and `location`;
 - `scope`: `resourceGroup` or `subscription`;
 - `resourceGroup` for resource-group deployments;
 - `parameters`: string, number, or boolean provisioning parameter values;
+- `parameterBindings`, `parameterVariables`, `graphResources`: optional
+  settings supplied with a direct stack or exported by its resource entrypoint;
 - `environmentValues`: additional deployment environment values.
 
-Use one source configuration: do not combine `layer` with separate
-`entrypoint` or `outputDirectory` options. For advanced project integrations,
+Use one source configuration: do not combine `stack` with `layer`, `entrypoint`,
+or compiler inputs, or `layer` with separate `entrypoint` or `outputDirectory`
+options. For advanced project integrations,
 inspect the installed `ProvisionOptions` declaration and reuse existing helpers.
 
 ## Layering and component selection

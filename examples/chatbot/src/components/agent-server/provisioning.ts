@@ -1,4 +1,4 @@
-import { createParameterVariables, defineProvisioning } from "iac-composer";
+import { createParameterVariables } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -281,53 +281,52 @@ const { env, deployedAgentServerImage, registryEndpoint } = createParameterVaria
     ),
   },
 );
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-    containerImage: fn.cond(
-      fn.not(fn.empty(deployedAgentServerImage)),
-      deployedAgentServerImage,
-      fn.concat(
-        registryEndpoint,
-        "/",
-        fn.readEnvironmentVariable(
-          "AGENT_SERVER_IMAGE_REPOSITORY",
-          fn.concat("azure-sdk-qa-bot-agent-server:", env),
-        ),
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
+  containerImage: fn.cond(
+    fn.not(fn.empty(deployedAgentServerImage)),
+    deployedAgentServerImage,
+    fn.concat(
+      registryEndpoint,
+      "/",
+      fn.readEnvironmentVariable(
+        "AGENT_SERVER_IMAGE_REPOSITORY",
+        fn.concat("azure-sdk-qa-bot-agent-server:", env),
       ),
     ),
-    managedIdentityClientId: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_CLIENT_ID",
-    ),
-    serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
-    sharedIdentityName: fn.readEnvironmentVariable("MANAGED_IDENTITY_NAME"),
-    frontendIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
-    aiResourceName: fn.readEnvironmentVariable("AI_RESOURCE_NAME"),
-    aiProjectName: fn.readEnvironmentVariable("AI_PROJECT_NAME"),
-    cosmosDbAccountName: fn.readEnvironmentVariable("COSMOSDB_ACCOUNT_NAME"),
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
-    appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME"),
-    actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME"),
-    agentServerAppServicePlanName: fn.readEnvironmentVariable(
-      "AGENT_SERVER_APP_SERVICE_PLAN_NAME",
-      "",
-    ),
-    agentServerLogWorkspaceName: fn.readEnvironmentVariable(
-      "AGENT_SERVER_LOG_WORKSPACE_NAME",
-      "",
-    ),
-    agentServerSiteName: fn.readEnvironmentVariable(
-      "AGENT_SERVER_SITE_NAME",
-      "",
-    ),
-    agentServerAppInsightsName: fn.readEnvironmentVariable(
-      "AGENT_SERVER_APP_INSIGHTS_NAME",
-      "",
-    ),
-    agentServerAlertName: fn.readEnvironmentVariable(
-      "AGENT_SERVER_ALERT_NAME",
-      "",
-    ),
-  },
-});
+  ),
+  managedIdentityClientId: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_CLIENT_ID",
+  ),
+  serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
+  sharedIdentityName: fn.readEnvironmentVariable("MANAGED_IDENTITY_NAME"),
+  frontendIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
+  aiResourceName: fn.readEnvironmentVariable("AI_RESOURCE_NAME"),
+  aiProjectName: fn.readEnvironmentVariable("AI_PROJECT_NAME"),
+  cosmosDbAccountName: fn.readEnvironmentVariable("COSMOSDB_ACCOUNT_NAME"),
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
+  appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME"),
+  actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME"),
+  agentServerAppServicePlanName: fn.readEnvironmentVariable(
+    "AGENT_SERVER_APP_SERVICE_PLAN_NAME",
+    "",
+  ),
+  agentServerLogWorkspaceName: fn.readEnvironmentVariable(
+    "AGENT_SERVER_LOG_WORKSPACE_NAME",
+    "",
+  ),
+  agentServerSiteName: fn.readEnvironmentVariable(
+    "AGENT_SERVER_SITE_NAME",
+    "",
+  ),
+  agentServerAppInsightsName: fn.readEnvironmentVariable(
+    "AGENT_SERVER_APP_INSIGHTS_NAME",
+    "",
+  ),
+  agentServerAlertName: fn.readEnvironmentVariable(
+    "AGENT_SERVER_ALERT_NAME",
+    "",
+  ),
+};
+
+export default stack;
