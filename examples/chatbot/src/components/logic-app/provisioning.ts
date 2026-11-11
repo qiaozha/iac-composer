@@ -1,5 +1,3 @@
-import { defineProvisioning } from "iac-composer";
-
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -288,55 +286,54 @@ stack.outputs.add(
   documentDbConnectionName,
 );
 
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION"),
-    managedIdentityName: fn.readEnvironmentVariable("MANAGED_IDENTITY_NAME"),
-    botIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
-    integrationAccountName: fn.readEnvironmentVariable(
-      "INTEGRATION_ACCOUNT_NAME",
-      "",
-    ),
-    teamsConnectionName: fn.readEnvironmentVariable(
-      "TEAMS_CONNECTION_NAME",
-      "",
-    ),
-    azureBlobConnectionName: fn.readEnvironmentVariable(
-      "AZURE_BLOB_CONNECTION_NAME",
-      "",
-    ),
-    documentDbConnectionName: fn.readEnvironmentVariable(
-      "DOCUMENT_DB_CONNECTION_NAME",
-      "",
-    ),
-    logicAppWorkflowName: fn.readEnvironmentVariable(
-      "LOGIC_APP_WORKFLOW_NAME",
-      "",
-    ),
-    logicAppAlertName: fn.readEnvironmentVariable(
-      "LOGIC_APP_ALERT_NAME",
-      "",
-    ),
-    actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME"),
-    functionAppName: fn.readEnvironmentVariable("FUNCTION_APP_NAME"),
-    teamsGroupId: fn.readEnvironmentVariable("LOGIC_APP_TEAMS_GROUP_ID"),
-    teamsChannelIds: fn.readEnvironmentVariable(
-      "LOGIC_APP_TEAMS_CHANNEL_IDS",
-    ),
-    serverBaseUrl: fn.readEnvironmentVariable("SERVER_BASE_URL"),
-    serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
-    botBaseUrl: fn.readEnvironmentVariable("BOT_BASE_URL"),
-    botAudience: fn.readEnvironmentVariable("BOT_AUDIENCE"),
-    botId: fn.readEnvironmentVariable("BOT_ID"),
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
-    createTeamsConnection: fn.eq(
-      fn.readEnvironmentVariable("CREATE_TEAMS_CONNECTION", "true"),
-      "true",
-    ),
-    deployWorkflow: fn.eq(
-      fn.readEnvironmentVariable("DEPLOY_LOGIC_APP_WORKFLOW", "true"),
-      "true",
-    ),
-  },
-});
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable("AZURE_LOCATION"),
+  managedIdentityName: fn.readEnvironmentVariable("MANAGED_IDENTITY_NAME"),
+  botIdentityName: fn.readEnvironmentVariable("BOT_IDENTITY_NAME"),
+  integrationAccountName: fn.readEnvironmentVariable(
+    "INTEGRATION_ACCOUNT_NAME",
+    "",
+  ),
+  teamsConnectionName: fn.readEnvironmentVariable(
+    "TEAMS_CONNECTION_NAME",
+    "",
+  ),
+  azureBlobConnectionName: fn.readEnvironmentVariable(
+    "AZURE_BLOB_CONNECTION_NAME",
+    "",
+  ),
+  documentDbConnectionName: fn.readEnvironmentVariable(
+    "DOCUMENT_DB_CONNECTION_NAME",
+    "",
+  ),
+  logicAppWorkflowName: fn.readEnvironmentVariable(
+    "LOGIC_APP_WORKFLOW_NAME",
+    "",
+  ),
+  logicAppAlertName: fn.readEnvironmentVariable(
+    "LOGIC_APP_ALERT_NAME",
+    "",
+  ),
+  actionGroupName: fn.readEnvironmentVariable("ACTION_GROUP_NAME"),
+  functionAppName: fn.readEnvironmentVariable("FUNCTION_APP_NAME"),
+  teamsGroupId: fn.readEnvironmentVariable("LOGIC_APP_TEAMS_GROUP_ID"),
+  teamsChannelIds: fn.readEnvironmentVariable(
+    "LOGIC_APP_TEAMS_CHANNEL_IDS",
+  ),
+  serverBaseUrl: fn.readEnvironmentVariable("SERVER_BASE_URL"),
+  serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
+  botBaseUrl: fn.readEnvironmentVariable("BOT_BASE_URL"),
+  botAudience: fn.readEnvironmentVariable("BOT_AUDIENCE"),
+  botId: fn.readEnvironmentVariable("BOT_ID"),
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
+  createTeamsConnection: fn.eq(
+    fn.readEnvironmentVariable("CREATE_TEAMS_CONNECTION", "true"),
+    "true",
+  ),
+  deployWorkflow: fn.eq(
+    fn.readEnvironmentVariable("DEPLOY_LOGIC_APP_WORKFLOW", "true"),
+    "true",
+  ),
+};
+
+export default stack;

@@ -6,7 +6,11 @@ import { pathToFileURL } from "node:url";
 import { test, type TestContext } from "node:test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { compileProvisioning, createDeployment, IacComposerError } from "../src/index.js";
+import { Resource, Stack, fn } from "@azure/provisioning-core";
+import {
+  compileProvisioning, createDeployment, createParameterVariables, Deployment,
+  IacComposerError, type Command, type DeploymentEvent,
+} from "../src/index.js";
 import { importTypeScript } from "../src/typescript-loader.js";
 
 const execFileAsync = promisify(execFile);
@@ -22,12 +26,145 @@ async function fixture(t: TestContext, source: string) {
   await writeFile(entrypoint, `
 import { Resource, ResourceGroup, Stack, fn } from "@azure/provisioning-core";
 import { wrapExpression } from "@azure/provisioning-core/internal";
-import { createGraphResource, createParameterVariables, defineProvisioning, loopResource } from "iac-composer";
+import { createGraphResource, createParameterVariables, loopResource } from "iac-composer";
 const stack = new Stack("main", { targetScope: "resourceGroup" });
 ${source}
 `);
   return { root, entrypoint, output: join(root, ".generated/core") };
 }
+
+test("direct stacks compile with typed overrides and preserve layer and dry-run step order", async (t) => {
+  const { root, output } = await fixture(t, "export default stack;");
+  const stack = new Stack("main", { targetScope: "resourceGroup" });
+  const location = stack.parameters.add("location", "string");
+  stack.parameters.add("enabled", "bool", { defaultValue: true });
+  stack.parameters.add("capacity", "int");
+  const { region } = createParameterVariables(stack, { region: "authored-region" });
+  new Resource(stack, {
+    type: "Microsoft.Storage/storageAccounts", apiVersion: "2025-01-01",
+    name: "teststorage", location,
+  });
+  const events: DeploymentEvent[] = [];
+  const deployment = createDeployment({
+    projectDirectory: root, dryRun: true, log: () => {},
+    onEvent: (event) => events.push(event),
+  });
+  const settings = { location: region };
+  for (const layer of ["core", "app"]) {
+    assert.deepEqual(await deployment.provision(layer, {
+      stack, outputDirectory: join(root, ".generated", layer),
+      parameterBindings: settings,
+      parameters: { location: "runtime-region", enabled: false, capacity: 0 },
+    }), {});
+    await deployment.deploy(`${layer} application`, () => {
+      assert.fail("Dry runs must not execute application actions.");
+    });
+  }
+  const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
+  assert.match(parameters, /var region = 'authored-region'/);
+  for (const [name, conversion] of [["location", ""], ["enabled", "bool"], ["capacity", "int"]]) {
+    assert.match(parameters, new RegExp(`param ${name} = ${conversion ? `${conversion}\\(` : ""}readEnvironmentVariable\\('IAC_COMPOSER_PARAM_${name}'\\)`));
+  }
+  assert.doesNotMatch(parameters, /runtime-region/);
+  assert.equal(settings.location, region);
+  assert.equal(stack.variables.size, 0);
+  assert.equal(stack.outputs.size, 0);
+  assert.deepEqual(events.filter(event => event.type === "artifacts").map(event => ({
+    layer: event.layer, dependsOn: event.dependsOn,
+  })), [
+    { layer: "core", dependsOn: [] }, { layer: "app", dependsOn: ["core"] },
+  ]);
+  assert.deepEqual(events.filter(event => event.type === "step" && event.status !== "started")
+    .map(event => [event.name, event.status]), [
+    ["core", "previewed"], ["core application", "skipped"],
+    ["app", "previewed"], ["app application", "skipped"],
+  ]);
+});
+
+test("direct stack settings preserve authored bindings, variables and Graph declarations", async (t) => {
+  const { root, output } = await fixture(t, "export default stack;");
+  const stack = new Stack("main", { targetScope: "resourceGroup" });
+  const location = stack.parameters.add("location", "string");
+  const displayName = stack.parameters.add("displayName", "string");
+  stack.outputs.add("LOCATION", "string", location);
+  const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
+  await deployment.provision("core", {
+    stack, outputDirectory: output,
+    parameterBindings: { location: fn.concat("region-", "one") },
+    parameterVariables: { env: "dev" },
+    graphResources: [{
+      identifier: "application", type: "Microsoft.Graph/applications",
+      body: { uniqueName: "direct-stack", displayName },
+    }],
+  });
+  const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
+  assert.match(parameters, /var env = 'dev'/);
+  assert.match(parameters, /param location = 'region-one'/);
+  assert.match(await readFile(join(output, "main.bicep"), "utf8"), /resource application 'Microsoft.Graph\/applications@v1.0'/);
+});
+
+test("direct stacks return provisioning outputs before application actions and stop on provisioning failure", async (t) => {
+  const { root } = await fixture(t, "export default stack;");
+  const previous = process.env.IAC_TEST_ACCOUNT_NAME;
+  t.after(() => {
+    if (previous === undefined) delete process.env.IAC_TEST_ACCOUNT_NAME;
+    else process.env.IAC_TEST_ACCOUNT_NAME = previous;
+  });
+  for (const fail of [false, true]) {
+    const calls: string[] = [];
+    class MockDeployment extends Deployment {
+      override async execute(command: Command): Promise<void> {
+        assert.equal(command.command, "azd");
+        if (command.args?.[0] === "env" && command.args[1] === "new") {
+          const env = join(command.cwd!, ".azure/test");
+          await mkdir(env, { recursive: true });
+          await writeFile(join(env, "config.json"), "{}");
+        }
+        if (command.args?.[0] === "provision") {
+          calls.push("provision");
+          if (fail) throw new Error("Provisioning failed.");
+        }
+      }
+      override async capture(command: Command): Promise<string> {
+        assert.deepEqual(command.args, ["env", "get-values", "--environment", "test"]);
+        return 'IAC_TEST_ACCOUNT_NAME="created-account"';
+      }
+    }
+    const stack = new Stack("main", { targetScope: "resourceGroup" });
+    stack.outputs.add("IAC_TEST_ACCOUNT_NAME", "string", "created-account");
+    const deployment = new MockDeployment({ projectDirectory: root, environment: "test", log: () => {} });
+    const run = async () => {
+      const outputs = await deployment.provision("core", {
+        stack, outputDirectory: join(root, fail ? "failure" : "success"),
+      });
+      await deployment.deploy("application", () => {
+        assert.equal(outputs.IAC_TEST_ACCOUNT_NAME, "created-account");
+        calls.push("deploy");
+      });
+    };
+    if (fail) {
+      await assert.rejects(run(), /Provisioning failed/);
+      assert.deepEqual(calls, ["provision"]);
+    } else {
+      await run();
+      assert.deepEqual(calls, ["provision", "deploy"]);
+    }
+  }
+});
+
+test("invalid direct stacks fail explicitly without replacing prior artifacts", async (t) => {
+  const { root, output } = await fixture(t, "export default stack;");
+  await mkdir(output, { recursive: true });
+  await writeFile(join(output, "main.bicep"), "previous");
+  const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
+  await assert.rejects(deployment.provision("invalid", {
+    // @ts-expect-error The runtime must also reject invalid JavaScript callers.
+    stack: {},
+    outputDirectory: output,
+  }), (error: unknown) => error instanceof IacComposerError &&
+    error.diagnostic.code === "PROVISIONING_DEFINITION_INVALID");
+  assert.equal(await readFile(join(output, "main.bicep"), "utf8"), "previous");
+});
 
 test("stack entrypoints render internally and generate parameter bindings without exposing override values", async (t) => {
   const { root, entrypoint, output } = await fixture(t, `
@@ -40,7 +177,7 @@ const account = new Resource(stack, {
   name: "teststorage", location, properties: { capacity },
 }, { condition: enabled });
 stack.outputs.add("ACCOUNT_ID", "string", account.id);
-export default defineProvisioning({ stack });
+export default stack;
 `);
   const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
   assert.deepEqual(await deployment.provision("core", {
@@ -61,11 +198,9 @@ test("explicit parameter variables and environment expressions remain authored d
   const { entrypoint, output } = await fixture(t, `
 const location = stack.parameters.add("location", "string");
 stack.outputs.add("LOCATION", "string", location);
-export default defineProvisioning({
-  stack,
-  parameterVariables: { env: "dev" },
-  parameters: { location: fn.concat("region-", wrapExpression({ kind: "symbolic-value", path: "env" })) },
-});
+export const parameterVariables = { env: "dev" };
+export const parameterBindings = { location: fn.concat("region-", wrapExpression({ kind: "symbolic-value", path: "env" })) };
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
@@ -80,7 +215,8 @@ const location = stack.parameters.add("location", "string");
 const { env } = createParameterVariables(stack, { env: "dev" });
 const { region } = createParameterVariables(stack, { region: fn.concat("region-", env) });
 stack.outputs.add("LOCATION", "string", location);
-export default defineProvisioning({ stack, parameters: { location: region } });
+export const parameterBindings = { location: region };
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
@@ -108,7 +244,7 @@ createGraphResource(stack, {
 });
 stack.outputs.add("APP_ID", "string", application.appId);
 stack.outputs.add("PRINCIPAL_ID", "string", principal.id);
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
@@ -134,7 +270,7 @@ const updates = loopResource(stack, models, {
 new Resource(stack, {
   type: "Microsoft.Storage/storageAccounts", apiVersion: "2025-01-01", name: "storage",
 }, { dependsOn: [updates] });
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
@@ -181,7 +317,7 @@ const updates = loopResource(stack, [{ name: "model", capacity: 1 }], {
 });
 // @ts-expect-error A loop dependency handle is not a scalar resource instance.
 updates.id;
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await execFileAsync(process.execPath, [
     resolve("node_modules/typescript/bin/tsc"),
@@ -205,7 +341,7 @@ stack.parameters.add("enabled", "bool");
 stack.parameters.add("capacity", "int");
 stack.parameters.add("settings", "object");
 stack.parameters.add("labels", "array");
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const { stdout } = await execFileAsync("bicep", [
@@ -231,7 +367,7 @@ test("unused authored parameters remain valid and repeated compilation does not 
   const { entrypoint, output } = await fixture(t, `
 stack.parameters.add("reserved", "string");
 export { stack };
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
@@ -253,13 +389,11 @@ test("Graph declarations preserve Graph-only inputs and conditions", async (t) =
   const { entrypoint, output } = await fixture(t, `
 const displayName = stack.parameters.add("displayName", "string");
 const enabled = stack.parameters.add("enabled", "bool");
-export default defineProvisioning({
-  stack,
-  graphResources: [{
-    identifier: "application", type: "Microsoft.Graph/applications",
-    condition: enabled, body: { uniqueName: "test", displayName },
-  }],
-});
+export const graphResources = [{
+  identifier: "application", type: "Microsoft.Graph/applications",
+  condition: enabled, body: { uniqueName: "test", displayName },
+}];
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
@@ -280,7 +414,7 @@ const storage = new Resource(group, {
   name: "unitstorage", location: "eastus",
 });
 scoped.outputs.add("STORAGE_ID", "string", storage.id);
-export default defineProvisioning({ stack: scoped });
+export default scoped;
 `);
   const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
   await deployment.provision("nested", {
@@ -306,7 +440,7 @@ const model = loopResource(stack, new Resource(stack, {
 new Resource(stack, {
   type: "Microsoft.CognitiveServices/accounts/deployments", apiVersion: "2025-06-01", name: "other",
 }, { dependsOn: [model], condition: enabled });
-export default defineProvisioning({ stack });
+export default stack;
 `);
   await compileProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
@@ -319,19 +453,23 @@ export default defineProvisioning({ stack });
 });
 
 for (const [label, source, code] of [
-  ["unknown parameters", `export default defineProvisioning({ stack, parameters: { missing: "value" } });`, "PROVISIONING_PARAMETER_UNKNOWN"],
-  ["duplicate Graph identifiers", `export default defineProvisioning({ stack, graphResources: [
+  ["unknown parameters", `export const parameterBindings = { missing: "value" }; export default stack;`, "PROVISIONING_PARAMETER_UNKNOWN"],
+  ["duplicate Graph identifiers", `export const graphResources = [
     { identifier: "app", type: "Microsoft.Graph/applications", body: {} },
     { identifier: "App", type: "Microsoft.Graph/applications", body: {} },
-  ] });`, "PROVISIONING_GRAPH_INVALID"],
-  ["invalid parameter identifiers", `export default defineProvisioning({ stack, parameters: { "bad-name": "value" } });`, "PROVISIONING_IDENTIFIER_INVALID"],
-  ["ambiguous source contracts", `export default defineProvisioning({ stack }); export const outputBicep = [{ path: "main.bicep", contents: "old" }];`, "PROVISIONING_SOURCE_CONFLICT"],
-  ["duplicate typed parameter variables", `createParameterVariables(stack, { env: "dev", Env: "other" }); export default defineProvisioning({ stack });`, "PROVISIONING_REFERENCE_CONFLICT"],
-  ["mixed parameter-variable declarations", `createParameterVariables(stack, { env: "dev" }); export default defineProvisioning({ stack, parameterVariables: { env: "other" } });`, "PROVISIONING_REFERENCE_CONFLICT"],
-  ["duplicate typed Graph identifiers", `createGraphResource(stack, { identifier: "app", type: "Microsoft.Graph/applications", body: { uniqueName: "one" } }); createGraphResource(stack, { identifier: "App", type: "Microsoft.Graph/applications", body: { uniqueName: "two" } }); export default defineProvisioning({ stack });`, "PROVISIONING_REFERENCE_CONFLICT"],
-  ["foreign Graph dependencies", `const foreign = new Stack("foreign"); const application = createGraphResource(foreign, { identifier: "app", type: "Microsoft.Graph/applications", body: { uniqueName: "test" } }); createGraphResource(stack, { identifier: "principal", type: "Microsoft.Graph/servicePrincipals", body: { appId: application.appId }, dependsOn: [application] }); export default defineProvisioning({ stack });`, "PROVISIONING_REFERENCE_SCOPE"],
-  ["invalid loop factories", `loopResource(stack, [{ name: "model" }], { itemVariable: "model", create: () => ({}) }); export default defineProvisioning({ stack });`, "PROVISIONING_LOOP_INVALID"],
-  ["invalid loop collections", `loopResource(stack, "not-an-array", { itemVariable: "model", create: () => new Resource(stack, { type: "Microsoft.Test/items", apiVersion: "2025-01-01", name: "item" }) }); export default defineProvisioning({ stack });`, "PROVISIONING_LOOP_INVALID"],
+  ]; export default stack;`, "PROVISIONING_GRAPH_INVALID"],
+  ["invalid parameter identifiers", `export const parameterBindings = { "bad-name": "value" }; export default stack;`, "PROVISIONING_IDENTIFIER_INVALID"],
+  ["ambiguous source contracts", `export default stack; export const outputBicep = [{ path: "main.bicep", contents: "old" }];`, "PROVISIONING_SOURCE_CONFLICT"],
+  ["duplicate typed parameter variables", `createParameterVariables(stack, { env: "dev", Env: "other" }); export default stack;`, "PROVISIONING_REFERENCE_CONFLICT"],
+  ["mixed parameter-variable declarations", `createParameterVariables(stack, { env: "dev" }); export const parameterVariables = { env: "other" }; export default stack;`, "PROVISIONING_REFERENCE_CONFLICT"],
+  ["invalid stack exports", `export default { stack };`, "PROVISIONING_DEFINITION_INVALID"],
+  ["invalid parameter bindings", `export const parameterBindings = []; export default stack;`, "PROVISIONING_DEFINITION_INVALID"],
+  ["invalid parameter variables", `export const parameterVariables = null; export default stack;`, "PROVISIONING_DEFINITION_INVALID"],
+  ["invalid Graph settings", `export const graphResources = {}; export default stack;`, "PROVISIONING_DEFINITION_INVALID"],
+  ["duplicate typed Graph identifiers", `createGraphResource(stack, { identifier: "app", type: "Microsoft.Graph/applications", body: { uniqueName: "one" } }); createGraphResource(stack, { identifier: "App", type: "Microsoft.Graph/applications", body: { uniqueName: "two" } }); export default stack;`, "PROVISIONING_REFERENCE_CONFLICT"],
+  ["foreign Graph dependencies", `const foreign = new Stack("foreign"); const application = createGraphResource(foreign, { identifier: "app", type: "Microsoft.Graph/applications", body: { uniqueName: "test" } }); createGraphResource(stack, { identifier: "principal", type: "Microsoft.Graph/servicePrincipals", body: { appId: application.appId }, dependsOn: [application] }); export default stack;`, "PROVISIONING_REFERENCE_SCOPE"],
+  ["invalid loop factories", `loopResource(stack, [{ name: "model" }], { itemVariable: "model", create: () => ({}) }); export default stack;`, "PROVISIONING_LOOP_INVALID"],
+  ["invalid loop collections", `loopResource(stack, "not-an-array", { itemVariable: "model", create: () => new Resource(stack, { type: "Microsoft.Test/items", apiVersion: "2025-01-01", name: "item" }) }); export default stack;`, "PROVISIONING_LOOP_INVALID"],
 ] as const) {
   test(`invalid stack definitions reject ${label} without erasing prior artifacts`, async (t) => {
     const { entrypoint, output } = await fixture(t, source);

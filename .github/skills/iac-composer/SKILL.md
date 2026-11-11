@@ -44,6 +44,13 @@ appropriate planning workflow, then resume implementation here. Do not require
 or repeat a specific planner. The planner-neutral MCP entry point is
 `iac_composer_get_context`; `iac_composer_get_reference` retrieves actual
 installed provisioning-library and runtime-helper TypeScript declarations.
+Both MCP tools are optional read-only conveniences, not provisioning dependencies.
+In skill-only sessions, resolve the installed project packages with ordinary
+Node module resolution, inspect narrowly scoped `.d.ts` declarations and use
+the local `iac-composer` CLI. Do not add or start MCP merely to follow this skill.
+Read this skill once, then only the reference section or symbol needed for a
+specific unresolved question. Reuse compatible authored source and dependency
+choices; do not repeat broad inventories or dump entire declarations/templates.
 
 ## Guardrails
 
@@ -94,8 +101,9 @@ helpers. Preserve the selected resource plan without redesigning it.
 
 The CLI deployment program must default-export
 `defineDeployment(async (deployment) => { ... })`. Resource entrypoints loaded
-by its `deployment.provision` calls default-export `defineProvisioning({ stack })`.
-`defineProvisioning` does not replace the deployment program's default export.
+by its `deployment.provision` calls default-export the `Stack` itself.
+A Stack export does not replace the deployment program's default export.
+Alternatively, pass the stack directly to `deployment.provision(name, { stack, ... })`.
 Service modules export named lifecycle functions called by that program; these
 modules are parts of one implementation, not alternate deployment programs.
 
@@ -120,10 +128,11 @@ resource provisioning and the application/data operations that follow it:
   the runtime-managed artifact layout.
 - Bind earlier outputs through the provisioning API's parameters, not top-level
   reads of live state in the provisioning entrypoint.
-- Default-export `defineProvisioning({ stack })` from each resource entrypoint.
+- Default-export the `Stack` itself from each resource entrypoint, or pass it
+  directly through `deployment.provision(name, { stack, ... })`.
   The runtime compiles the stack and manages parameter bindings. Declare
-  optional `parameters`, `parameterVariables`, and `graphResources` in that
-  definition only when the layer needs them.
+  optional `parameterBindings`, `parameterVariables`, and `graphResources`
+  as named entrypoint exports, or alongside a direct stack, only when needed.
 - Use `createParameterVariables` and `createGraphResource` for declared, typed
   handles, and `loopResource` callbacks for typed loop items. Do not construct
   symbolic paths by hand or cast an arbitrary string into a resource reference.
@@ -221,8 +230,8 @@ inherited keys such as `toString` cannot be selected as components.
   the reference. Only a demonstrated core/renderer limitation warrants considering
   a narrowly documented unsupported-control fallback;
 - default-export `defineDeployment(async (deployment) => { ... })`;
-- connect each typed resource layer to `deployment.provision` using the
-  `defineProvisioning` entrypoint API and real parameter bindings;
+- connect each typed resource layer to `deployment.provision` using a direct
+  stack or an entrypoint default-exporting the stack, with real parameter bindings;
 - use one `.generated/<component>` output directory per layer;
 - use returned outputs rather than reconstructing resource names or endpoints;
 - wrap application and configuration side effects in `deployment.deploy`,

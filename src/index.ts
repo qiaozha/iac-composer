@@ -10,14 +10,19 @@ import {
 } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import type { Stack } from "@azure/provisioning-core";
 import { getAzdProject, iacComposerAzdTemplate } from "./azd.js";
 import { importTypeScript } from "./typescript-loader.js";
 import { IacComposerError } from "./diagnostics.js";
 import type { DeploymentEvent, StepEvent } from "./report.js";
-import { isProvisioningDefinition, renderProvisioningDefinition } from "./provisioning.js";
+import {
+  isProvisioningStack,
+  renderProvisioningStack,
+  validateProvisioningSettings,
+  type ProvisioningSettings,
+} from "./provisioning.js";
 
 export {
-  defineProvisioning,
   createParameterVariables,
   createGraphResource,
   loopResource,
@@ -27,8 +32,7 @@ export {
   type GraphResourceInput,
   type GraphResourceType,
   type ResourceLoopOptions,
-  type ProvisioningSource,
-  type ProvisioningDefinition,
+  type ProvisioningSettings,
   type GraphResourceDefinition,
 } from "./provisioning.js";
 export { IacComposerError, type Diagnostic } from "./diagnostics.js";
@@ -113,7 +117,8 @@ export interface ProvisioningLayer {
   readonly outputDirectory: string;
 }
 
-export interface ProvisionOptions {
+export interface ProvisionOptions extends ProvisioningSettings {
+  stack?: Stack;
   layer?: ProvisioningLayer;
   entrypoint?: string;
   compiler?: Command;
@@ -211,7 +216,16 @@ export class Deployment {
         options.templateFile ?? "main.bicep",
         options.parametersFile ?? "main.bicepparam",
       ];
-      if (options.compiler && options.artifactsDirectory) {
+      if (options.stack !== undefined) {
+        const files = await renderProvisioningStack(
+          options.stack,
+          resolve(this.projectDirectory, "package.json"),
+          requiredFiles,
+          options.parameters ?? {},
+          options,
+        );
+        await installRenderedFiles(outputDirectory, files, azdProjectDirectory, requiredFiles);
+      } else if (options.compiler && options.artifactsDirectory) {
         await this.#execute(options.compiler);
         await copyProvisioningArtifacts(
           resolve(this.projectDirectory, options.artifactsDirectory),
@@ -229,7 +243,7 @@ export class Deployment {
         );
       } else {
         throw new Error(
-          "Provisioning requires either an entrypoint or a compiler with artifactsDirectory.",
+          "Provisioning requires a stack, an entrypoint, or a compiler with artifactsDirectory.",
         );
       }
 
@@ -453,10 +467,15 @@ function validateProvisionOptions(options: ProvisionOptions): void {
   let message: string | undefined;
   if (
     options.layer &&
-    [options.entrypoint, options.outputDirectory, options.compiler, options.artifactsDirectory]
+    [options.stack, options.entrypoint, options.outputDirectory, options.compiler, options.artifactsDirectory]
       .some((value) => value !== undefined)
   ) {
     message = "Provisioning with a layer cannot also specify source or output options.";
+  } else if (
+    options.stack !== undefined &&
+    [options.entrypoint, options.compiler, options.artifactsDirectory].some((value) => value !== undefined)
+  ) {
+    message = "Provisioning cannot combine a stack with an entrypoint, compiler, or artifactsDirectory.";
   } else if (
     options.entrypoint !== undefined &&
     (options.compiler !== undefined || options.artifactsDirectory !== undefined)
@@ -466,8 +485,13 @@ function validateProvisionOptions(options: ProvisionOptions): void {
     (options.compiler !== undefined) !== (options.artifactsDirectory !== undefined)
   ) {
     message = "Provisioning with a compiler requires both compiler and artifactsDirectory.";
-  } else if (!options.layer?.entrypoint && !options.entrypoint && !options.compiler) {
-    message = "Provisioning requires either an entrypoint or a compiler with artifactsDirectory.";
+  } else if (!options.layer?.entrypoint && !options.entrypoint && !options.compiler && options.stack === undefined) {
+    message = "Provisioning requires a stack, an entrypoint, or a compiler with artifactsDirectory.";
+  } else if (
+    options.stack === undefined &&
+    [options.parameterBindings, options.parameterVariables, options.graphResources].some((value) => value !== undefined)
+  ) {
+    message = "Stack settings must be supplied with a direct stack or exported by its entrypoint.";
   }
   if (message) {
     throw new IacComposerError({
@@ -475,7 +499,7 @@ function validateProvisionOptions(options: ProvisionOptions): void {
       category: "configuration",
       message,
       property: "provision",
-      expected: "Exactly one source: layer, entrypoint, or compiler with artifactsDirectory.",
+      expected: "Exactly one source: stack, layer, entrypoint, or compiler with artifactsDirectory.",
       repair: "Choose one provisioning source and remove conflicting options.",
     });
   }
@@ -564,20 +588,30 @@ export async function compileProvisioning(
       repair: "Check the entrypoint path, syntax, package module type, and provisioning library dependencies; run the project's typecheck.",
     }, { cause: error, message: error instanceof Error ? error.message : String(error) });
   }
-  const definition = module.provisioning ?? module.default;
-  if (isProvisioningDefinition(definition) && module.outputBicep !== undefined) {
+  const stack = module.default;
+  if (isProvisioningStack(stack) && module.outputBicep !== undefined) {
     throw new IacComposerError({
       code: "PROVISIONING_SOURCE_CONFLICT", category: "configuration",
       message: "A provisioning module cannot export both a stack definition and rendered files.",
       target: resolvedEntrypoint,
-      repair: "Use defineProvisioning or the legacy rendered-file export, not both.",
+      repair: "Default-export a Stack or use the legacy rendered-file export, not both.",
     });
   }
   let files: readonly RenderedFile[];
   try {
-    files = isProvisioningDefinition(definition)
-      ? await renderProvisioningDefinition(definition, resolvedEntrypoint, requiredFiles, parameters)
-      : resolveRenderedFiles(module, resolvedEntrypoint);
+    if (isProvisioningStack(stack)) {
+      validateProvisioningSettings(module);
+      files = await renderProvisioningStack(stack, resolvedEntrypoint, requiredFiles, parameters, module);
+    } else if (stack !== undefined && !(typeof stack === "object" && stack !== null && "outputBicep" in stack)) {
+      throw new IacComposerError({
+        code: "PROVISIONING_DEFINITION_INVALID", category: "configuration",
+        message: "A provisioning entrypoint must default-export a Stack.",
+        target: resolvedEntrypoint,
+        repair: "Export the Stack directly and use named parameterBindings, parameterVariables, or graphResources exports for optional settings.",
+      });
+    } else {
+      files = resolveRenderedFiles(module, resolvedEntrypoint);
+    }
   } catch (cause) {
     if (cause instanceof IacComposerError) throw cause;
     throw new IacComposerError({

@@ -45,7 +45,8 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
   assert.match(skill, /fn\.json\("0\.25"\)/);
-  assert.match(skill, /Default-export `defineProvisioning\(\{ stack \}\)`/);
+  assert.match(skill, /Default-export the `Stack` itself/);
+  assert.match(skill, /deployment\.provision\(name, \{ stack, \.\.\. \}\)/);
   assert.match(skill, /Use `createParameterVariables` and `createGraphResource`/);
   assert.match(skill, /references\/direct-authoring\.md#connect-resources-with-role-assignments/);
   assert.match(skill, /Runtime-managed files inside `\.generated` do not select a separate deployment\s+workflow/);
@@ -55,7 +56,7 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.match(reference, /Typechecking\s+alone does not catch this serialization error/);
   for (const contents of [skill, reference]) {
     assert.match(contents, /CLI deployment program must default-export\s+`defineDeployment/);
-    assert.match(contents, /`defineProvisioning` does not replace the deployment program's default export/);
+    assert.match(contents, /A Stack export does not replace the deployment program's default export/);
     assert.match(contents, /Maintain one canonical working implementation/);
     assert.match(contents, /unless (?:explicitly requested|the\s+user explicitly requests them)/);
     assert.doesNotMatch(contents, /deployment\/history\/attempt-N/);
@@ -317,11 +318,12 @@ test("documented resources, scoped RBAC, fractional values and core fallback typ
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
   const blocks = [...reference.matchAll(/```ts\n([\s\S]*?)```/g)].map(match => match[1]!);
   const program = blocks.find(block => block.includes("const coreLayer"));
+  const directProgram = blocks.find(block => block.includes('import stack from "./infra.js"'));
   const resources = blocks.find(block => block.includes("new StorageAccount"));
   const fallback = blocks.find(block => block.includes("new Resource(stack"));
   const fractional = blocks.find(block => block.includes("const containerResources"));
   const roleAssignment = blocks.find(block => block.includes("const blobReaderRoleId"));
-  assert.ok(program && resources && fallback && fractional && roleAssignment);
+  assert.ok(program && directProgram && resources && fallback && fractional && roleAssignment);
   const fractionalResource = `
 ${fractional.replace('import { fn } from "@azure/provisioning-core";', "")}
 new Resource(stack, {
@@ -340,15 +342,16 @@ new Resource(stack, {
   },
 });
 `;
-  const provisioning = resources.replace("export default defineProvisioning({ stack });", `
+  const provisioning = resources.replace("export default stack;", `
 ${fallback}
 ${fractionalResource}
 ${roleAssignment.replace('import { Resource } from "@azure/provisioning-core";', "")}
-export default defineProvisioning({ stack });
+export default stack;
 `);
   const directory = join(consumer, "deployment");
   await mkdir(directory);
   await writeFile(join(directory, "deploy.ts"), program);
+  await writeFile(join(directory, "direct.ts"), directProgram);
   await writeFile(join(directory, "infra.ts"), provisioning);
   const example = object(JSON.parse(await readFile(resolve(root, "examples/chatbot/package.json"), "utf8")));
   const dependencies = object(example.dependencies);
@@ -370,7 +373,7 @@ export default defineProvisioning({ stack });
     resolve(root, "node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--target", "ES2022", "--module", "NodeNext",
     "--moduleResolution", "NodeNext", "--skipLibCheck", "--types", "node", "--typeRoots", resolve(root, "node_modules/@types"),
-    "deployment/deploy.ts", "deployment/infra.ts",
+    "deployment/deploy.ts", "deployment/direct.ts", "deployment/infra.ts",
   ], { cwd: consumer });
   const bin = join(consumer, "bin"), marker = join(consumer, "unexpected-cloud-command");
   await mkdir(bin);
@@ -411,6 +414,22 @@ export default defineProvisioning({ stack });
   assert.match(generated, /resource searchService 'Microsoft\.Search\/searchServices@/);
   assert.match(generated, /type: 'SystemAssigned'/);
   assert.match(generated, /output SEARCH_PRINCIPAL_ID string = searchService\.identity\.principalId/);
+  await execFileAsync(process.execPath, [
+    resolve(root, "dist/cli.js"), "deployment/direct.ts", "--dry-run", "--report", reportPath,
+  ], {
+    cwd: consumer,
+    env: {
+      ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`,
+      AZURE_LOCATION: "eastus", AZURE_RESOURCE_GROUP: "unit-existing-rg",
+      AZURE_SUBSCRIPTION_ID: "11111111-2222-4333-8444-555555555555",
+    },
+  });
+  const directReport: ExecutionReport = JSON.parse(await readFile(reportPath, "utf8"));
+  assert.equal(directReport.status, "succeeded");
+  assert.deepEqual(directReport.steps.map(step => [step.kind, step.status]), [
+    ["provision", "previewed"], ["env", "skipped"],
+  ]);
+  assert.equal(await readFile(directReport.artifacts[0]!.templateFile, "utf8"), generated);
   await assert.rejects(access(marker), { code: "ENOENT" });
 });
 

@@ -1,4 +1,4 @@
-import { createGraphResource, defineProvisioning } from "iac-composer";
+import { createGraphResource } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -192,44 +192,43 @@ stack.outputs.add(
   fn.concat("api://", serverAudience, "/.default"),
 );
 
-export default defineProvisioning({
-  stack,
-  parameters: {
-    environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
-    applicationUniqueName: fn.readEnvironmentVariable(
-      "SERVER_APPLICATION_UNIQUE_NAME",
-      "",
-    ),
-    serviceManagementReference: fn.readEnvironmentVariable(
-      "SERVICE_MANAGEMENT_REFERENCE",
-      "",
-    ),
-    serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
-    preAuthorizeClients: fn.readEnvironmentVariable(
-      "SERVER_PREAUTHORIZE_CLIENTS",
-      "false",
-    ),
-    managedIdentityPrincipalId: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_PRINCIPAL_ID",
-      "",
-    ),
-    botIdentityPrincipalId: fn.readEnvironmentVariable(
-      "BOT_IDENTITY_PRINCIPAL_ID",
-      "",
-    ),
-    delegatedScopeId: fn.readEnvironmentVariable(
-      "SERVER_DELEGATED_SCOPE_ID",
-      "",
-    ),
-    applicationRoleId: fn.readEnvironmentVariable(
-      "SERVER_APPLICATION_ROLE_ID",
-      "",
-    ),
-    existingPermissionScopes: fn.json(
-      fn.readEnvironmentVariable("SERVER_EXISTING_PERMISSION_SCOPES", "[]"),
-    ),
-    existingApplicationRoles: fn.json(
-      fn.readEnvironmentVariable("SERVER_EXISTING_APPLICATION_ROLES", "[]"),
-    ),
-  },
-});
+export const parameterBindings = {
+  environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
+  applicationUniqueName: fn.readEnvironmentVariable(
+    "SERVER_APPLICATION_UNIQUE_NAME",
+    "",
+  ),
+  serviceManagementReference: fn.readEnvironmentVariable(
+    "SERVICE_MANAGEMENT_REFERENCE",
+    "",
+  ),
+  serverAudience: fn.readEnvironmentVariable("SERVER_AUDIENCE"),
+  preAuthorizeClients: fn.readEnvironmentVariable(
+    "SERVER_PREAUTHORIZE_CLIENTS",
+    "false",
+  ),
+  managedIdentityPrincipalId: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_PRINCIPAL_ID",
+    "",
+  ),
+  botIdentityPrincipalId: fn.readEnvironmentVariable(
+    "BOT_IDENTITY_PRINCIPAL_ID",
+    "",
+  ),
+  delegatedScopeId: fn.readEnvironmentVariable(
+    "SERVER_DELEGATED_SCOPE_ID",
+    "",
+  ),
+  applicationRoleId: fn.readEnvironmentVariable(
+    "SERVER_APPLICATION_ROLE_ID",
+    "",
+  ),
+  existingPermissionScopes: fn.json(
+    fn.readEnvironmentVariable("SERVER_EXISTING_PERMISSION_SCOPES", "[]"),
+  ),
+  existingApplicationRoles: fn.json(
+    fn.readEnvironmentVariable("SERVER_EXISTING_APPLICATION_ROLES", "[]"),
+  ),
+};
+
+export default stack;

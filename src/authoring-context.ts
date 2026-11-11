@@ -56,7 +56,7 @@ export async function getIacComposerContext(
       implementation: {
         source: "Customer-owned TypeScript; no intermediary generator contract is necessary.",
         resourceDefinitions: "@azure/provisioning-* constructs in Stack objects, with provisioning library references for dependencies.",
-        render: "Default-export defineProvisioning({ stack, ... }) from each resource entrypoint; the runtime handles compilation and parameter bindings internally.",
+        render: "Pass a Stack directly to deployment.provision or default-export it from a resource entrypoint; the runtime handles compilation and parameter bindings internally. No definition wrapper is required.",
         composition: "Default-export defineDeployment; call deployment.provision in business order and wire returned outputs.",
         dependencies: "Declare and install approved project-local iac-composer/core/service packages before lookup. A CLI on PATH is not a local ESM dependency. Use public package imports; never persist absolute host dist paths. Registry/access failures are blockers, not resource-support evidence.",
         fallback: "Prefer service-specific types. For a missing service provisioning library/type, inspect @azure/provisioning-core Resource and retain the Stack/render/provision pipeline. A genuine external fallback needs a specific installed-version capability gap and must respect explicit user constraints.",
@@ -68,7 +68,7 @@ export async function getIacComposerContext(
         "Preserve the selected Azure resources and controls, regardless of which planner supplied them.",
         "Inspect source and establish approved project-local dependencies before looking up installed provisioning-library declarations.",
         "Resolve references inside the registered workspace. Repair missing packages or mismatched CLI/MCP/skill assets; do not substitute handwritten Bicep for a configuration failure.",
-        "Author typed resources and relationships, default-export defineProvisioning({ stack }), and compose ordered provision/deploy steps.",
+        "Author typed resources and relationships, pass or default-export the Stack directly, and compose ordered provision/deploy steps.",
         "Typecheck and run a trusted local --dry-run --report <path> preview; require compiled resource artifacts and ordered provision steps, not only a skipped deploy wrapper.",
         "Only provision/deploy to Azure when explicitly authorized.",
       ],
@@ -100,7 +100,8 @@ export async function getIacComposerContext(
       ...await listProvisioningLibraries(options.workspaceRoot, options.projectDirectory),
       foundationPackages: ["@azure/provisioning-core"],
       serializationImport: "@azure/provisioning-core/serialization",
-      definitionImport: "import { defineProvisioning } from 'iac-composer'",
+      stackImport: "import { Stack } from '@azure/provisioning-core'",
+      provisioning: "Pass { stack } to deployment.provision, or default-export the Stack from an entrypoint. Optional entrypoint settings are named parameterBindings, parameterVariables, and graphResources exports.",
       resourcePackages: "@azure/provisioning-<service>",
       sdkDocumentation: "https://github.com/Azure/azure-sdk-for-js/tree/main/sdk/core/provisioning-core",
       lookup: "Use iac_composer_get_reference with the installed package and optional symbol/file, selecting a Node project inside the registered workspace. Empty inventory or SDK_PACKAGE_UNAVAILABLE requires dependency-manifest/install repair; nothing is downloaded by lookup.",
@@ -110,7 +111,7 @@ export async function getIacComposerContext(
     data = {
       groups: {
         composition: [
-          "defineDeployment", "createDeployment", "Deployment", "defineProvisioning", "ProvisioningSource",
+          "defineDeployment", "createDeployment", "Deployment", "ProvisioningSettings",
           "createParameterVariables", "createGraphResource", "loopResource",
         ],
         environment: ["requiredEnv", "optionalEnv", "readEnvironmentFile", "persistEnvironmentFile"],

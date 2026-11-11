@@ -119,7 +119,8 @@ test("chatbot resource entrypoints delegate compilation to iac-composer", async 
     "shared/identity-bootstrap", "shared/identity-configuration",
   ]) {
     const source = await readFile(resolve("examples/chatbot/src/components", `${component}.ts`), "utf8");
-    assert.match(source, /export default defineProvisioning\(/);
+    assert.match(source, /export default stack;/);
+    assert.match(source, /export const parameterBindings = \{/);
     assert.doesNotMatch(source, /bicepRef|symbolic-value|renderBicepFiles|renderBicepParameterFile|renderGraphStack|outputBicep/);
   }
   const helper = await readFile(resolve("examples/chatbot/src/runtime/provisioning.ts"), "utf8");

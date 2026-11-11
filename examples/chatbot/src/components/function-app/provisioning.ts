@@ -1,4 +1,4 @@
-import { createParameterVariables, defineProvisioning } from "iac-composer";
+import { createParameterVariables } from "iac-composer";
 import { Stack, type ExpressionOrValue } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -191,39 +191,38 @@ const { env, deployedFunctionImage, registryEndpoint } = createParameterVariable
     ),
   },
 );
-export default defineProvisioning({
-  stack,
-  parameters: {
-    location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
-    containerImage: fn.cond(
-      fn.not(fn.empty(deployedFunctionImage)),
-      deployedFunctionImage,
-      fn.concat(
-        registryEndpoint,
-        "/",
-        fn.readEnvironmentVariable(
-          "FUNCTION_IMAGE_REPOSITORY",
-          fn.concat("azure-sdk-qa-bot-function:", env),
-        ),
+export const parameterBindings = {
+  location: fn.readEnvironmentVariable("AZURE_LOCATION", "westus2"),
+  containerImage: fn.cond(
+    fn.not(fn.empty(deployedFunctionImage)),
+    deployedFunctionImage,
+    fn.concat(
+      registryEndpoint,
+      "/",
+      fn.readEnvironmentVariable(
+        "FUNCTION_IMAGE_REPOSITORY",
+        fn.concat("azure-sdk-qa-bot-function:", env),
       ),
     ),
-    managedIdentityClientId: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_CLIENT_ID",
-    ),
-    managedIdentityResourceId: fn.readEnvironmentVariable(
-      "MANAGED_IDENTITY_RESOURCE_ID",
-    ),
-    storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
-    keyVaultName: fn.readEnvironmentVariable("KEY_VAULT_NAME"),
-    appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME"),
-    functionAppServicePlanName: fn.readEnvironmentVariable(
-      "FUNCTION_APP_SERVICE_PLAN_NAME",
-      "",
-    ),
-    functionLogWorkspaceName: fn.readEnvironmentVariable(
-      "FUNCTION_LOG_WORKSPACE_NAME",
-      "",
-    ),
-    functionAppName: fn.readEnvironmentVariable("FUNCTION_APP_NAME", ""),
-  },
-});
+  ),
+  managedIdentityClientId: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_CLIENT_ID",
+  ),
+  managedIdentityResourceId: fn.readEnvironmentVariable(
+    "MANAGED_IDENTITY_RESOURCE_ID",
+  ),
+  storageAccountName: fn.readEnvironmentVariable("STORAGE_ACCOUNT_NAME"),
+  keyVaultName: fn.readEnvironmentVariable("KEY_VAULT_NAME"),
+  appConfigName: fn.readEnvironmentVariable("APP_CONFIG_NAME"),
+  functionAppServicePlanName: fn.readEnvironmentVariable(
+    "FUNCTION_APP_SERVICE_PLAN_NAME",
+    "",
+  ),
+  functionLogWorkspaceName: fn.readEnvironmentVariable(
+    "FUNCTION_LOG_WORKSPACE_NAME",
+    "",
+  ),
+  functionAppName: fn.readEnvironmentVariable("FUNCTION_APP_NAME", ""),
+};
+
+export default stack;

@@ -15,7 +15,7 @@ const topics = {
     topics: ["overview", "commands", "provisioning", "report"],
     resources: {
       catalog: null,
-      source: "Customer-selected @azure/provisioning-* stacks exported with defineProvisioning; legacy rendered-file and custom-compiler inputs remain supported.",
+      source: "Customer-selected @azure/provisioning-* stacks passed directly to provision or default-exported from entrypoints; legacy rendered-file and custom-compiler inputs remain supported.",
       planningRequired: false,
       planningInput: "Resource requirements from the user, repository evidence, or any planning workflow; no planner-specific JSON contract is required.",
       delegatedCommands: ["generate", "validate", "architecture-catalog"],
@@ -82,19 +82,22 @@ const topics = {
     },
     source: {
       entrypointContract: {
-        preferred: "Default-export defineProvisioning({ stack, parameters?, parameterVariables?, graphResources? }); the runtime compiles and binds parameters.",
+        preferred: "Default-export a Stack directly; the runtime compiles and binds parameters. Optional named exports: parameterBindings, parameterVariables, graphResources.",
         references: "Declare typed handles with createParameterVariables and createGraphResource; use loopResource collection callbacks for inferred loop-item fields.",
         legacy: "A named outputBicep array or default object containing that array is still supported.",
       },
       oneOf: [
+        { required: ["stack"], shape: { stack: "Stack from @azure/provisioning-core", outputDirectory: "optional string" } },
         { required: ["layer"], shape: { layer: { entrypoint: "string", outputDirectory: "string" } } },
         { required: ["entrypoint"], shape: { entrypoint: "string", outputDirectory: "optional string" } },
         { required: ["compiler", "artifactsDirectory"], shape: { compiler: { command: "string", args: "optional string[]", cwd: "optional string", env: "optional NodeJS.ProcessEnv" }, artifactsDirectory: "string", outputDirectory: "optional string" } },
       ],
       constraints: [
-        "Do not combine layer with entrypoint, outputDirectory, compiler, or artifactsDirectory.",
+        "Do not combine stack with layer, entrypoint, compiler, or artifactsDirectory.",
+        "Do not combine layer with stack, entrypoint, outputDirectory, compiler, or artifactsDirectory.",
         "Do not combine entrypoint with compiler or artifactsDirectory.",
         "Compiler and artifactsDirectory must be supplied together.",
+        "Supply stack settings with a direct stack, or as named exports from its entrypoint.",
       ],
     },
     options: {
@@ -106,6 +109,9 @@ const topics = {
       scope: { enum: ["subscription", "resourceGroup"], description: "Bicep targetScope remains authoritative." },
       resourceGroup: { type: "string", description: "Passed to azd as AZURE_RESOURCE_GROUP." },
       parameters: { type: "object", values: ["string", "number", "boolean"], constraint: "Stack definitions receive generated typed bindings; legacy artifacts need readEnvironmentVariable() with optional bool/int/json conversion." },
+      parameterBindings: { type: "object", description: "Authored stack parameter expressions. Supply with a direct stack or export from its entrypoint; runtime parameters override these bindings." },
+      parameterVariables: { type: "object", description: "Authored parameter-file variables. Prefer createParameterVariables for typed handles." },
+      graphResources: { type: "array", description: "Additional Graph declarations. Prefer createGraphResource for typed handles." },
       environmentValues: { type: "object", values: ["string", "undefined"] },
     },
     outputBicepSchema: {
@@ -123,7 +129,7 @@ const topics = {
       "The selected template and parameters files must be emitted before artifacts are installed.",
     ],
     ordering: "Author calls in business order. Output directly under .generated/<layer> creates a named azd layer depending on the preceding first-seen layer. Repeated layers preserve their original dependency.",
-    example: 'await deployment.provision("core", { entrypoint: "./infra.ts", outputDirectory: ".generated/core" });',
+    example: 'await deployment.provision("core", { stack, outputDirectory: ".generated/core" });',
   },
   report: {
     schemaVersion: "1.0",

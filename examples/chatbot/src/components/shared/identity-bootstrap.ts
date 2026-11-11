@@ -1,4 +1,4 @@
-import { createGraphResource, defineProvisioning } from "iac-composer";
+import { createGraphResource } from "iac-composer";
 import { Stack } from "@azure/provisioning-core";
 import { fn } from "../../runtime/provisioning.js";
 
@@ -69,17 +69,16 @@ stack.outputs.add(
   fn.concat("api://", serverApplication.appId, "/.default"),
 );
 
-export default defineProvisioning({
-  stack,
-  parameters: {
-    environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
-    applicationUniqueName: fn.readEnvironmentVariable(
-      "SERVER_APPLICATION_UNIQUE_NAME",
-      "",
-    ),
-    serviceManagementReference: fn.readEnvironmentVariable(
-      "SERVICE_MANAGEMENT_REFERENCE",
-      "",
-    ),
-  },
-});
+export const parameterBindings = {
+  environmentName: fn.readEnvironmentVariable("AZURE_ENV_NAME"),
+  applicationUniqueName: fn.readEnvironmentVariable(
+    "SERVER_APPLICATION_UNIQUE_NAME",
+    "",
+  ),
+  serviceManagementReference: fn.readEnvironmentVariable(
+    "SERVICE_MANAGEMENT_REFERENCE",
+    "",
+  ),
+};
+
+export default stack;

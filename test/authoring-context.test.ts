@@ -87,7 +87,8 @@ test("provisioning library inventory distinguishes declarations from installed p
   const inventory = await getIacComposerContext("sdk", { workspaceRoot: root });
   assert.deepEqual(inventory.data.foundationPackages, ["@azure/provisioning-core"]);
   assert.equal(inventory.data.serializationImport, "@azure/provisioning-core/serialization");
-  assert.equal(inventory.data.definitionImport, "import { defineProvisioning } from 'iac-composer'");
+  assert.equal(inventory.data.stackImport, "import { Stack } from '@azure/provisioning-core'");
+  assert.match(String(inventory.data.provisioning), /Pass \{ stack \} to deployment\.provision/);
   assert.deepEqual(inventory.data.packages, [{
     packageName: "@azure/provisioning-storage", installed: true, version: "9.8.7",
   }]);

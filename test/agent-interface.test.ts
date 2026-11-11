@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { promisify } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
+import { Stack } from "@azure/provisioning-core";
 
 import {
   compileProvisioning,
@@ -60,7 +61,8 @@ test("discovery is focused, structured and explicit about side effects and bound
   assert.equal(commands.down.options["--force"].required, true);
   assert.equal(commands.down.options["--purge"].default, false);
   const provisioning = await describe("provisioning");
-  assert.equal(provisioning.source.oneOf.length, 3);
+  assert.equal(provisioning.source.oneOf.length, 4);
+  assert.deepEqual(provisioning.source.oneOf[0].required, ["stack"]);
   assert.equal(provisioning.outputBicepSchema.minItems, 1);
   assert.equal(provisioning.options.templateFile.default, "main.bicep");
   const report = await describe("report");
@@ -210,6 +212,10 @@ test("requiredEnv provides actionable metadata without revealing configured valu
 
 test("ambiguous and partial sources fail before executing a custom compiler", async () => {
   for (const options of [
+    { stack: new Stack("main"), entrypoint: "infra.ts" },
+    { stack: new Stack("main"), compiler: { command: "must-not-run" }, artifactsDirectory: "files" },
+    { stack: new Stack("main"), layer: { entrypoint: "infra.ts", outputDirectory: "files" } },
+    { entrypoint: "infra.ts", parameterBindings: { location: "eastus" } },
     { entrypoint: "infra.ts", compiler: { command: "must-not-run" }, artifactsDirectory: "files" },
     { compiler: { command: "must-not-run" } },
     { artifactsDirectory: "files" },
