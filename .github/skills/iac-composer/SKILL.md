@@ -5,7 +5,7 @@ license: MIT
 compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Use the installed iac-composer APIs and project commands for provisioning and deployment. Cloud execution requires authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.13"
+  version: "2.14"
 ---
 
 # Define infrastructure with iac-composer
@@ -92,10 +92,6 @@ choices; do not repeat broad inventories or dump entire declarations/templates.
 
 ## Direct composition
 
-Read [the direct authoring reference](./references/direct-authoring.md).
-Reuse existing provisioning-library code, runtime-compatible entrypoints, and lifecycle
-helpers. Preserve the selected resource plan without redesigning it.
-
 Follow the [customer workflow](./references/direct-authoring.md#customer-workflow-define-provision-deploy):
 define resources in a `Stack`, provision them with `deployment.provision`, and
 run application or data-plane actions with `deployment.deploy` after their
@@ -103,36 +99,33 @@ prerequisites. Preview the same deployment program with `--dry-run`.
 Compilation and generated-file layout are runtime internals, not a separate
 customer API or deployment step.
 
-Before the first live operation or a contract-related repair, read the relevant
-section of [API contract preflight](./references/api-contracts.md). Batch local
-capability checks once; distinguish provisioning inputs, rendered ARM payloads,
-provider-operation bodies and data-plane client options. Do not guess shapes,
-runtime-managed output paths or resource IDs from suffixes.
-
 ## Service modules and ordered layers
 
 The CLI deployment program must default-export
-`defineDeployment(async (deployment) => { ... })`. Resource entrypoints loaded
-by its `deployment.provision` calls default-export the `Stack` itself.
+`defineDeployment(async (deployment) => { ... })`; the CLI supplies the
+callback's `Deployment` context. Default-export the `Stack` itself from resource
+entrypoints, or pass it directly to `deployment.provision(name, { stack, ... })`.
 A Stack export does not replace the deployment program's default export.
-Alternatively, pass the stack directly to `deployment.provision(name, { stack, ... })`.
+Optional `parameterBindings`, `parameterVariables`, and `graphResources` are
+named entrypoint exports or settings alongside a direct stack.
 Service modules export named lifecycle functions called by that program; these
 modules are parts of one implementation, not alternate deployment programs.
 
-Use `defineDeployment(async (deploy) => { ... })` as the composition root.
-`deploy` is the callback's `Deployment` instance, not a separate API.
 Await service-module functions in dependency order. Each module should own its
 resource provisioning and the application/data operations that follow it:
 
-- Put shared network, identity and other prerequisites in shared layers.
-- Use `await deploy.provision(...)` for each independently provisionable layer,
+- Put shared network, identity and other prerequisites in shared layers;
+  colocate component-only resources with their owner.
+- Connect consumers to their targets with least-privilege, scoped
+  [role assignments](./references/direct-authoring.md#connect-resources-with-role-assignments).
+- Use `await deployment.provision(...)` for each independently provisionable layer,
   returning its outputs to later modules.
-- Use `await deploy.deploy(...)` for image/application actions, readiness checks,
+- Use `await deployment.deploy(...)` for image/application actions, readiness checks,
   and JavaScript data-plane SDK calls after their resource, RBAC and network
   prerequisites. Do not nest provisioning inside a deploy callback: dry runs
   skip that callback and would miss its infrastructure.
 - Give each layer a distinct `.generated/<layer>` directory directly below the
-  same absolute `.generated` root. `deploy.inDirectory(...)` changes a service's
+  same absolute `.generated` root. `deployment.inDirectory(...)` changes a service's
   working context while preserving layer dependency order.
 - A TypeScript service module and a provisioning layer are different boundaries.
   Imports do not automatically split a resource stack or schedule deployments.
@@ -140,11 +133,6 @@ resource provisioning and the application/data operations that follow it:
   the runtime-managed artifact layout.
 - Bind earlier outputs through the provisioning API's parameters, not top-level
   reads of live state in the provisioning entrypoint.
-- Default-export the `Stack` itself from each resource entrypoint, or pass it
-  directly through `deployment.provision(name, { stack, ... })`.
-  The runtime compiles the stack and manages parameter bindings. Declare
-  optional `parameterBindings`, `parameterVariables`, and `graphResources`
-  as named entrypoint exports, or alongside a direct stack, only when needed.
 - Use `createParameterVariables` and `createGraphResource` for declared, typed
   handles, and `loopResource` callbacks for typed loop items. Do not construct
   symbolic paths by hand or cast an arbitrary string into a resource reference.
@@ -153,6 +141,11 @@ Follow the [service-module example](./references/direct-authoring.md#service-mod
 Inspect a dry-run report for layer dependencies, nested artifacts and the
 interleaved provision/deploy sequence; test actual callback order and failures
 offline before an authorized cloud run.
+
+For multi-component deployments, expose a component map and honor
+`deployment.component`. Reject unknown names with the valid names in the error.
+Use `Object.hasOwn` for object-backed maps, or a `Map`, so inherited keys cannot
+select components.
 
 ## Provisioning library release selection
 
@@ -181,7 +174,7 @@ Keep ARM resource creation, configuration, and role assignments in the
 provisioning libraries/core fallback. A missing provisioning package does not
 make a data-plane SDK a resource-provisioning replacement. Declare needed client
 packages and `@azure/identity` locally; inspect their installed types and official
-documentation rather than passing them to the provisioning-only reference tool.
+documentation rather than passing them to the provisioning-only reference API.
 
 Run data-plane SDK calls in awaited `deployment.deploy` actions after the
 resource outputs, data-plane RBAC, and network access are ready. Construct
@@ -205,64 +198,15 @@ Identify:
 - resource ownership, dependency edges, required controls, and validation
   requirements from the supplied plan.
 
-Do not replace a working project structure with a generic template.
-Before writing resource code, follow the reference's dependency bootstrap:
-declare and install the selected project-local runtime/core and published service packages,
-then resolve their actual types from the workspace. A CLI on `PATH` is not a
-project dependency. Empty provisioning library inventory, registry/access errors, and rejected
-out-of-workspace lookups are configuration problems, not proof that the provisioning library
-cannot model the requested resource.
+Do not replace a working project structure with a generic template. Follow the
+[dependency bootstrap](./references/direct-authoring.md#bootstrap-dependencies-before-authoring)
+before authoring: a CLI on `PATH` is not a project dependency. Missing packages,
+registry/access failures and out-of-workspace lookups require configuration
+repair, not a different provisioning method. Document any genuine unsupported
+control with its installed package/version, missing capability and bounded
+fallback; report unavailable approved dependencies as blockers.
 
-### 2. Model ownership and order
-
-Split the solution into components with clear owners:
-
-- put resources used by several components in a shared layer;
-- colocate component-only resources with that component;
-- provision each component immediately before its application lifecycle;
-- express cross-component dependencies through outputs and consume them only
-  after their producer;
-- connect resource identities to their targets with least-privilege, scoped
-  role assignments; follow the
-  [role-assignment example](./references/direct-authoring.md#connect-resources-with-role-assignments);
-- keep environment preparation first and interactive or post-provisioning
-  actions after their prerequisites.
-
-For a multi-component direct deployment, expose a component map and honor
-`deployment.component`. Reject unknown component names with the valid names in
-the error. Use `Object.hasOwn` for object-backed maps, or use a `Map`, so
-inherited keys such as `toString` cannot be selected as components.
-
-### 3. Author the smallest complete solution
-
-- implement the provider-qualified Azure resource types and controls in the
-  supplied plan;
-- use published service-specific provisioning library constructs where available;
-  for services not yet released on npmjs, use core `Resource` as documented in
-  the reference. Only a demonstrated core/renderer limitation warrants considering
-  a narrowly documented unsupported-control fallback;
-- default-export `defineDeployment(async (deployment) => { ... })`;
-- connect each typed resource layer to `deployment.provision` using a direct
-  stack or an entrypoint default-exporting the stack, with real parameter bindings;
-- use one `.generated/<component>` output directory per layer;
-- use returned outputs rather than reconstructing resource names or endpoints;
-- wrap application and configuration side effects in `deployment.deploy`,
-  commands in `deployment.run`, and ordered environment changes in
-  `deployment.env`;
-- use JavaScript data-plane SDKs inside those guarded actions for service data
-  APIs, not provisioning resources or handwritten HTTP when a supported client
-  covers the operation.
-
-Do not replace infrastructure authoring with unrelated provisioning scripts or
-direct resource-creation commands hidden inside `deployment.deploy`. Keep
-compilation and provisioning behind the iac-composer API boundary rather than
-adding a separate deployment toolchain to the workflow.
-Document any genuine unsupported-control exception with its installed
-package/version, missing type/property and bounded fallback. If required
-packages or matching runtime/reference assets cannot be obtained from an
-approved source, report the blocker instead of abandoning the selected method.
-
-### 4. Handle configuration deliberately
+### 2. Handle configuration deliberately
 
 - Use `requiredEnv` for mandatory values and explicit defaults only where the
   architecture permits them.
@@ -275,7 +219,7 @@ approved source, report the blocker instead of abandoning the selected method.
 - Keep production restrictions and CI-only policies already present in the
   repository.
 
-### 5. Validate in increasing order of cost
+### 3. Validate in increasing order of cost
 
 Use the repository's existing commands and local dependency:
 
@@ -293,21 +237,12 @@ download and execute a different `iac-composer` version.
 Before reporting completion, verify that:
 
 - authored files, not generated artifacts, contain the intended change;
-- every referenced component, resource, output, path, and environment variable
-  exists;
-- resource ownership and deployment order match the requested architecture;
-- generated TypeScript and provisioning entrypoints typecheck;
-- project manifests declare the runtime/core/resource dependencies and authored
-  imports use public package names, not machine-specific `dist` paths;
-- data-plane operations use the appropriate JavaScript clients and declared
-  dependencies, with authentication and calls skipped during dry runs;
-- resource entrypoints construct provisioning library resources and the
-  deployment program actually calls `deployment.provision`;
-- the dry run compiles those entrypoints and emits the expected generated
-  infrastructure and ordered provision steps, not only a skipped deploy wrapper;
-- service modules retain their complete resource relationships and share the intended
-  layer dependency order; dependent application/data actions run only after
-  provisioning succeeds and are skipped in dry runs;
+- declared dependencies, public package imports, TypeScript entrypoints,
+  configuration, and output consumers pass the relevant local checks;
+- the dry-run report contains compiled resources and the intended layer/step
+  order, not only a skipped deployment wrapper;
+- offline lifecycle tests verify dependent application/data actions run only
+  after provisioning succeeds and are skipped during preview;
 - no secret or local authentication/environment state was added to version control;
 - any operation not executed because it would change Azure is called out
   clearly with the exact next command.

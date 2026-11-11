@@ -69,35 +69,22 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.equal(typeof describeRuntimeCapabilities("overview"), "object");
 });
 
-test("API contract reference distinguishes installed interfaces and observed request-shape failures", async () => {
+test("shared guidance keeps reusable authoring rules without a consumer-specific preflight", async () => {
   await validateSkill(resolve(root, skillSources[0]));
   const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
-  assert.match(skill, /references\/api-contracts\.md/);
-  const reference = await readFile(resolve(root, skillSources[0], "references/api-contracts.md"), "utf8");
-  assert.match(reference, /current resource entrypoint default-exports a `Stack`/);
-  assert.match(reference, /older archived runtime exposing `defineProvisioning`/);
-  assert.match(reference, /Await `deployment\.provision`/);
-  assert.match(reference, /`deployment\.deploy` actions/);
-  assert.match(reference, /uploading blob contents is a data-plane deployment action/);
-  assert.match(reference, /npm run deploy -- --environment dev --dry-run --report preview\.json/);
-  assert.match(reference, /Compilation is internal to provisioning/);
-  assert.doesNotMatch(reference, /compileProvisioning|requiredFiles/);
-  assert.match(reference, /`_ID` suffix does not make a subscription GUID an ARM/);
-  assert.match(reference, /`iPAddressOrRange`, `action`/);
-  assert.match(reference, /already be ARM-shaped/);
-  assert.match(reference, /String\(identity\.id\)/);
-  const json = /```json\n([\s\S]*?)\n```/.exec(reference);
-  assert.ok(json);
-  assert.deepEqual(JSON.parse(json[1]!), { name: "candidate-search-name", type: "searchServices" });
-  assert.match(reference, /choose `subscription` \*\*or\*\* `tenantId`, not both/);
-  assert.match(reference, /new AzureCliCredential\(\{ subscription \}\)/);
-  assert.match(reference, /configure `auth\.useAzCliAuth=true`/);
-  assert.match(reference, /run-private `AZD_CONFIG_DIR`/);
-  assert.match(reference, /implementation-specific transport detail, not a prerequisite for other methods/);
-  assert.match(reference, /docker buildx version/);
-  assert.match(reference, /docker manifest inspect --verbose/);
-  assert.match(reference, /supported stdin\/PTY session/);
-  assert.match(reference, /successful CLI connection\/exit is not proof/);
+  const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
+  await assert.rejects(access(resolve(root, skillSources[0], "references/api-contracts.md")), { code: "ENOENT" });
+  for (const contents of [skill, reference]) {
+    assert.doesNotMatch(contents, /api-contracts\.md|checkNameAvailability|AZURE_CONFIG_DIR|AZD_CONFIG_DIR|auth\.useAzCliAuth|docker buildx|containerapp exec/);
+  }
+  assert.match(reference, /`ProvisionOutputs` is a string map/);
+  assert.match(reference, /declared types and authorized scope/);
+  assert.match(reference, /request bodies are distinct\s+contracts/);
+  assert.match(reference, /inner keys do not receive provisioning-library renaming/);
+  assert.match(reference, /rather than coercing a handle into a JavaScript object key/);
+  assert.deepEqual([...skill.matchAll(/^### \d+\. (.+)$/gm)].map(match => match[1]), [
+    "Inspect before editing", "Handle configuration deliberately", "Validate in increasing order of cost",
+  ]);
 });
 
 test("documented data-plane SDK operations are guarded, use returned endpoints, and propagate errors", async (t) => {
@@ -475,7 +462,7 @@ test("actual runtime package owns its skill and local consumer setup without MCP
   const paths = files.map((entry) => object(entry).path);
   assert.ok(paths.includes(".github/skills/iac-composer/SKILL.md"));
   assert.ok(paths.includes(".github/skills/iac-composer/references/direct-authoring.md"));
-  assert.ok(paths.includes(".github/skills/iac-composer/references/api-contracts.md"));
+  assert.equal(paths.includes(".github/skills/iac-composer/references/api-contracts.md"), false);
   assert.ok(paths.includes("dist/discovery.js"));
   assert.ok(paths.every(path => typeof path === "string" &&
     !path.startsWith("dist/mcp/") && !path.startsWith("agent-setup/profiles/")));
