@@ -5,7 +5,7 @@ license: MIT
 compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Use the installed iac-composer APIs and project commands for provisioning and deployment. Cloud execution requires authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.12"
+  version: "2.13"
 ---
 
 # Define infrastructure with iac-composer
@@ -41,13 +41,12 @@ requested.
 
 If architectural decisions are unresolved, obtain them from the user or an
 appropriate planning workflow, then resume implementation here. Do not require
-or repeat a specific planner. The planner-neutral MCP entry point is
-`iac_composer_get_context`; `iac_composer_get_reference` retrieves actual
-installed provisioning-library and runtime-helper TypeScript declarations.
-Both MCP tools are optional read-only conveniences, not provisioning dependencies.
-In skill-only sessions, resolve the installed project packages with ordinary
+or repeat a specific planner. Resolve installed project packages with ordinary
 Node module resolution, inspect narrowly scoped `.d.ts` declarations and use
-the local `iac-composer` CLI. Do not add or start MCP merely to follow this skill.
+the local `iac-composer` CLI. The optional local JavaScript APIs
+`getIacComposerContext` and `getTypeScriptReference` read authoring context and
+installed declarations without provisioning resources. No MCP server is
+shipped or required by this runtime.
 Read this skill once, then only the reference section or symbol needed for a
 specific unresolved question. Reuse compatible authored source and dependency
 choices; do not repeat broad inventories or dump entire declarations/templates.
@@ -96,6 +95,19 @@ choices; do not repeat broad inventories or dump entire declarations/templates.
 Read [the direct authoring reference](./references/direct-authoring.md).
 Reuse existing provisioning-library code, runtime-compatible entrypoints, and lifecycle
 helpers. Preserve the selected resource plan without redesigning it.
+
+Follow the [customer workflow](./references/direct-authoring.md#customer-workflow-define-provision-deploy):
+define resources in a `Stack`, provision them with `deployment.provision`, and
+run application or data-plane actions with `deployment.deploy` after their
+prerequisites. Preview the same deployment program with `--dry-run`.
+Compilation and generated-file layout are runtime internals, not a separate
+customer API or deployment step.
+
+Before the first live operation or a contract-related repair, read the relevant
+section of [API contract preflight](./references/api-contracts.md). Batch local
+capability checks once; distinguish provisioning inputs, rendered ARM payloads,
+provider-operation bodies and data-plane client options. Do not guess shapes,
+runtime-managed output paths or resource IDs from suffixes.
 
 ## Service modules and ordered layers
 

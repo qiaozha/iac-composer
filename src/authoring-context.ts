@@ -21,14 +21,8 @@ export const implementationRouting = {
     "Architecture-advice-only, inventory, cost-only, unrelated production diagnostics and non-Azure work.",
     "Advice-only or plan-only requests must not create files or deploy resources.",
   ],
-  safety: "MCP discovery reads metadata and declarations only. Use trusted local typechecks and dry runs before explicitly authorized provisioning/deployment. Registration does not authorize cloud changes.",
+  safety: "Local discovery reads metadata and declarations only. Use trusted local typechecks and dry runs before explicitly authorized provisioning/deployment. Installing the skill does not authorize cloud changes.",
 } as const;
-
-export const implementationContextDescription =
-  "Implement Azure infrastructure with @azure/provisioning-* resources and iac-composer when explicitly requested or selecting a method. Requires provisioning-library-authored resource entrypoints and deployment.provision, not a wrapper around raw Bicep/CLI provisioning. Get dependency bootstrap, resource/library/helper and validation/deployment guidance from any planner or the user. Honor explicit alternatives and maintained IaC. Read-only; no cloud execution.";
-
-export const implementationReferenceDescription =
-  "Look up installed TypeScript declarations for provisioning-library resources, core Resource/Stack/expressions and iac-composer public APIs. Resolve provisioning libraries from a Node project inside the registered workspace; missing dependencies require manifest/install repair, not raw Bicep. Does not execute code, download packages, select services or require a planner.";
 
 export async function getIacComposerContext(
   topic = "start",
@@ -67,7 +61,7 @@ export async function getIacComposerContext(
       workflow: [
         "Preserve the selected Azure resources and controls, regardless of which planner supplied them.",
         "Inspect source and establish approved project-local dependencies before looking up installed provisioning-library declarations.",
-        "Resolve references inside the registered workspace. Repair missing packages or mismatched CLI/MCP/skill assets; do not substitute handwritten Bicep for a configuration failure.",
+        "Resolve references inside the selected workspace. Repair missing packages or mismatched CLI/skill assets; do not substitute handwritten Bicep for a configuration failure.",
         "Author typed resources and relationships, pass or default-export the Stack directly, and compose ordered provision/deploy steps.",
         "Typecheck and run a trusted local --dry-run --report <path> preview; require compiled resource artifacts and ordered provision steps, not only a skipped deploy wrapper.",
         "Only provision/deploy to Azure when explicitly authorized.",
@@ -93,7 +87,7 @@ export async function getIacComposerContext(
       throw new IacComposerError({
         code: "WORKSPACE_REQUIRED", category: "configuration",
         message: "provisioning library inventory requires an explicit workspace.",
-        repair: "Configure the MCP workspace or supply workspaceRoot to the context API.",
+        repair: "Supply workspaceRoot to the local context API.",
       });
     }
     data = {
@@ -104,8 +98,8 @@ export async function getIacComposerContext(
       provisioning: "Pass { stack } to deployment.provision, or default-export the Stack from an entrypoint. Optional entrypoint settings are named parameterBindings, parameterVariables, and graphResources exports.",
       resourcePackages: "@azure/provisioning-<service>",
       sdkDocumentation: "https://github.com/Azure/azure-sdk-for-js/tree/main/sdk/core/provisioning-core",
-      lookup: "Use iac_composer_get_reference with the installed package and optional symbol/file, selecting a Node project inside the registered workspace. Empty inventory or SDK_PACKAGE_UNAVAILABLE requires dependency-manifest/install repair; nothing is downloaded by lookup.",
-      constraints: "Declarations describe the installed provisioning library, not a complete provider schema. Prefer core Resource for missing service provisioning libraries before any bounded external fallback. Align executing CLI/MCP and skill/reference versions before mixing API generations.",
+      lookup: "Use local getTypeScriptReference with the installed package and optional symbol/file, selecting a Node project inside workspaceRoot. Empty inventory or SDK_PACKAGE_UNAVAILABLE requires dependency-manifest/install repair; nothing is downloaded by lookup.",
+      constraints: "Declarations describe the installed provisioning library, not a complete provider schema. Prefer core Resource for missing service provisioning libraries before any bounded external fallback. Align executing CLI and skill/reference versions before mixing API generations.",
     };
   } else if (topic === "helpers") {
     data = {

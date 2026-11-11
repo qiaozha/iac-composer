@@ -8,10 +8,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Resource, Stack, fn } from "@azure/provisioning-core";
 import {
-  compileProvisioning, createDeployment, createParameterVariables, Deployment,
+  createDeployment, createParameterVariables, Deployment,
   IacComposerError, type Command, type DeploymentEvent,
 } from "../src/index.js";
 import { importTypeScript } from "../src/typescript-loader.js";
+import { previewProvisioning } from "./compiled-provisioning.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -202,7 +203,7 @@ export const parameterVariables = { env: "dev" };
 export const parameterBindings = { location: fn.concat("region-", wrapExpression({ kind: "symbolic-value", path: "env" })) };
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
   assert.match(parameters, /var env = 'dev'/);
   assert.match(parameters, /param location = 'region-\$\{env\}'/);
@@ -218,13 +219,13 @@ stack.outputs.add("LOCATION", "string", location);
 export const parameterBindings = { location: region };
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const parameters = await readFile(join(output, "main.bicepparam"), "utf8");
   assert.match(parameters, /var env = 'dev'/);
   assert.match(parameters, /var region = 'region-\$\{env\}'/);
   assert.match(parameters, /param location = region/);
   assert.doesNotMatch(await readFile(join(output, "main.bicep"), "utf8"), /var env|var region|iacValue/);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   assert.equal(await readFile(join(output, "main.bicepparam"), "utf8"), parameters);
 });
 
@@ -246,7 +247,7 @@ stack.outputs.add("APP_ID", "string", application.appId);
 stack.outputs.add("PRINCIPAL_ID", "string", principal.id);
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
   assert.match(main, /output APP_ID string = application\.appId/);
   assert.match(main, /output PRINCIPAL_ID string = principal\.id/);
@@ -272,7 +273,7 @@ new Resource(stack, {
 }, { dependsOn: [updates] });
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
   assert.match(main, /@batchSize\(1\)/);
   assert.match(main, /= \[for model in models: \{/);
@@ -343,7 +344,7 @@ stack.parameters.add("settings", "object");
 stack.parameters.add("labels", "array");
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const { stdout } = await execFileAsync("bicep", [
     "build-params", join(output, "main.bicepparam"), "--stdout",
   ], {
@@ -369,11 +370,11 @@ stack.parameters.add("reserved", "string");
 export { stack };
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
   assert.match(main, /param reserved string/);
   assert.doesNotMatch(main, /iacValue/);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   assert.equal(await readFile(join(output, "main.bicep"), "utf8"), main);
   const module = await importTypeScript(pathToFileURL(entrypoint).href);
   assert.ok(typeof module === "object" && module !== null && "stack" in module);
@@ -395,7 +396,7 @@ export const graphResources = [{
 }];
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
   assert.match(main, /param displayName string/);
   assert.match(main, /param enabled bool/);
@@ -442,7 +443,7 @@ new Resource(stack, {
 }, { dependsOn: [model], condition: enabled });
 export default stack;
 `);
-  await compileProvisioning(entrypoint, output);
+  await previewProvisioning(entrypoint, output);
   const main = await readFile(join(output, "main.bicep"), "utf8");
   assert.match(main, /var configurations = \[/);
   assert.equal((main.match(/@batchSize\(1\)/g) ?? []).length, 1);
@@ -475,7 +476,7 @@ for (const [label, source, code] of [
     const { entrypoint, output } = await fixture(t, source);
     await mkdir(output, { recursive: true });
     await writeFile(join(output, "main.bicep"), "previous");
-    await assert.rejects(compileProvisioning(entrypoint, output),
+    await assert.rejects(previewProvisioning(entrypoint, output),
       (error: unknown) => error instanceof IacComposerError && error.diagnostic.code === code);
     assert.equal(await readFile(join(output, "main.bicep"), "utf8"), "previous");
   });

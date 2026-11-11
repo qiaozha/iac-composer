@@ -91,7 +91,18 @@ Here, `infra.ts` default-exports a provisioning-library `Stack`. Alternatively,
 use `entrypoint: "./infra.ts"` instead of `stack` to load it at the provisioning
 step. Resource creation and application deployment remain separate operations:
 `deployment.provision` handles infrastructure; `deployment.deploy` guards
-application actions. For a complete example, see the chatbot's
+application and data-plane actions. For example, provision a storage account,
+container, and role assignments first, then upload blob data inside an awaited
+`deployment.deploy` callback using the Storage client. Keep credentials and
+clients inside that callback so preview skips their creation and service calls.
+
+The CLI supplies the deployment context and runs the program. Use that same
+program with `--dry-run` to generate and inspect local artifacts; compilation
+is internal to provisioning, not a separate customer API. See the
+[customer workflow](.github/skills/iac-composer/references/direct-authoring.md#customer-workflow-define-provision-deploy)
+for the define, provision, deploy, and preview sequence.
+
+For a complete example, see the chatbot's
 [TypeScript provisioning stack](examples/chatbot/src/components/shared/provisioning.ts)
 and [deployment program](examples/chatbot/src/deploy.ts).
 
@@ -112,8 +123,8 @@ Requirements can come from the user or any planning skill/tool. A specific
 recognition package, generator or JSON contract is not required.
 
 Use the [root-owned workspace setup guide](agent-setup/README.md) for a pinned
-skill install, conditional implementation preference and Copilot/Claude/Codex
-profiles. With GitHub CLI 2.97 or newer, run from the consumer repository:
+skill install and conditional implementation preference for Copilot/Claude/Codex.
+With GitHub CLI 2.97 or newer, run from the consumer repository:
 
 ```bash
 gh skill install qiaozha/iac-composer iac-composer \
@@ -121,11 +132,10 @@ gh skill install qiaozha/iac-composer iac-composer \
 ```
 
 This uses the common `.agents/skills` project location supported by Copilot and
-Codex. The same runtime package owns the `iac-composer-mcp` binary and its
-read-only `iac_composer_get_context` and `iac_composer_get_reference` tools.
-They expose provisioning-library Stack/resource authoring, actual installed TypeScript
-declarations, lifecycle helpers and validation/provision/deploy capabilities.
-The agent authors TypeScript directly and uses the existing runtime CLI for
+Codex. The runtime does not ship an MCP server or require server registration.
+Use local package declarations, the optional `getIacComposerContext` and
+`getTypeScriptReference` JavaScript APIs, and CLI discovery for authoring context.
+The agent authors TypeScript directly and uses the runtime CLI for
 trusted preview and explicitly authorized execution.
 
 The separate [azure-infrastructure tool](tools/azure-infrastructure/README.md)
@@ -161,8 +171,8 @@ These focused, versioned JSON descriptions expose command options, defaults,
 side effects, provisioning source constraints, the `outputBicep` JSON Schema,
 the report JSON Schema, and runtime limitations. Resource selection can come
 from any planning workflow; provider/access validation is separate. The runtime
-does not impose a logical resource catalog or generator schema. The MCP
-reference tool queries installed `@azure/provisioning-*` declarations rather
+does not impose a logical resource catalog or generator schema. The local
+reference API queries installed `@azure/provisioning-*` declarations rather
 than guessing resource properties or management-SDK request shapes.
 
 Library callers can use `describeRuntimeCapabilities(topic)`,
@@ -459,3 +469,16 @@ npm run iac-composer -- down examples/chatbot/.generated -e dev --force
 
 The chatbot component names are `shared`, `agent`, `agent-server`,
 `function-app`, `frontend`, and `logic-app`.
+
+## Runtime source layout
+
+| Module | Responsibility |
+| --- | --- |
+| [src/index.ts](src/index.ts) | Explicit public reexports only; customer imports remain `iac-composer`. |
+| [src/deployment-types.ts](src/deployment-types.ts) | Deployment, command, and provisioning option types. |
+| [src/deployment.ts](src/deployment.ts) | Deployment context, ordered steps, command execution, and provisioning lifecycle. |
+| [src/provisioning.ts](src/provisioning.ts) | Stack rendering, typed parameter/Graph handles, and resource loops. |
+| [src/provisioning-artifacts.ts](src/provisioning-artifacts.ts) | Internal entrypoint compilation, parameter bindings, and generated-file ownership. |
+
+Implementation modules import their owning modules directly rather than the
+public entrypoint. Compilation helpers are not reexported to customers.

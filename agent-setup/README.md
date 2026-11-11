@@ -25,8 +25,8 @@ npm ci
 npm run build
 ```
 
-The standalone local MCP binary is `iac-composer-mcp`, implemented in
-`dist/mcp/cli.js` in the same package as the runtime. Building
+The package provides the `iac-composer` CLI and local JavaScript APIs.
+No MCP server registration or host profile is required. Building
 `tools/azure-infrastructure`, installing its skill, and preparing its contracts
 are **not** prerequisites.
 
@@ -48,7 +48,7 @@ gh skill install qiaozha/iac-composer iac-composer \
 
 This creates `.agents/skills/iac-composer`, a common project location supported
 by Copilot and Codex. It does not require the Codex application. Other hosts
-can use MCP or the instruction/file bridge below. Do not install duplicate full
+can use the instruction/file bridge below. Do not install duplicate full
 skill trees in several auto-scanned locations.
 
 For unpublished changes use the reviewed checkout path instead of the GitHub
@@ -67,98 +67,50 @@ Bicep, azd, REST/management SDKs or another approach.
 If a host/version does not load `AGENTS.md`, merge the
 [minimal Claude bridge](CLAUDE.md.template) into the already-active
 `CLAUDE.md` where appropriate. Preserve unrelated project instructions. Use
-one workflow route rather than loading the same body through both skill and
-MCP. Architecture-only, inventory and unrelated diagnostic requests are not
+one workflow route rather than loading the same instructions twice.
+Architecture-only, inventory and unrelated diagnostic requests are not
 redirected into implementation.
 
-## 4. Register the root-owned, read-only MCP tools
+## 4. Inspect installed APIs locally
 
-| Host | Workspace registration | Profile |
-| --- | --- | --- |
-| Copilot CLI, Claude Code | `.mcp.json` with `mcpServers` | [Portable](profiles/portable-mcp.json) |
-| Copilot in VS Code | Root portable configuration when supported by the selected harness/settings | [Portable](profiles/portable-mcp.json) |
-| VS Code compatibility setup | `.vscode/mcp.json` with `servers`, only if portable registration is inactive | [VS Code](profiles/vscode-mcp.json) |
-| Codex | Trusted project `.codex/config.toml` | [Codex](profiles/codex-config.toml) |
-| Other local MCP hosts | Their own project configuration | [Stdio launch contract](profiles/stdio-server.json) |
+Resolve packages from the consumer project and read only the declarations
+needed for the selected resources. The optional local JavaScript APIs expose
+authoring context and bounded declaration lookup without loading resource code:
 
-Merge only the `iac-composer` server entry; preserve other servers and approval
-settings. For portable configuration, supply these non-secret paths to the
-process launching the host:
+```ts
+import { getIacComposerContext, getTypeScriptReference } from "iac-composer";
 
-```bash
-export IAC_COMPOSER_ROOT="/absolute/path/to/reviewed/iac-composer-package"
-export IAC_COMPOSER_WORKSPACE_ROOT="$PWD"
+const context = await getIacComposerContext("start");
+const reference = await getTypeScriptReference({
+  workspaceRoot: process.cwd(),
+  packageName: "@azure/provisioning-storage",
+  symbol: "StorageAccount",
+  projectDirectory: ".",
+});
+console.log(context, reference);
 ```
 
-Portable configurations use `${NAME}`; VS Code compatibility uses
-`${env:NAME}` and `${workspaceFolder}`. Codex arguments are not shell
-expressions: replace `/REPLACE/...` with reviewed absolute paths. Do not assume
-one variable-substitution syntax works in every host. An integrated terminal's
-environment does not necessarily configure the VS Code extension host.
+`getIacComposerContext` supports `start`, `authoring`, `sdk`, `helpers`,
+`provisioning`, `commands`, and `report`. The `sdk` topic requires
+`{ workspaceRoot, projectDirectory? }`; other topics do not accept
+`projectDirectory`. No Azure service catalog or planner contract is required.
 
-Copilot CLI does **not** read `.vscode/mcp.json`. Use its portable project file
-and normal trust flow; do not bypass untrusted-project restrictions. VS Code
-root portable support depends on version/harness/settings; where necessary
-review `chat.mcp.workspaceRootConfig.enabled`. Claude requires project MCP
-approval; Codex requires a trusted project. Do not activate duplicate portable
-and compatibility connections, or change global agent profiles automatically.
+`getTypeScriptReference` accepts `iac-composer` or an installed
+`@azure/provisioning-*` package. Omit `symbol` for an entrypoint excerpt;
+optional `file` and `line` select a bounded declaration-file range.
+Runtime symbol lookup is limited to names in the public package entrypoint.
+Missing packages/symbols and invalid paths fail explicitly.
 
-## MCP capabilities
-
-### `iac_composer_get_context`
-
-Read-only implementation discovery; `topic` defaults to `start`.
-
-- `start`: TypeScript resource authoring, planner-neutral requirements,
-  composition, validation, provision/deploy workflow and effects.
-- `authoring`: canonical provisioning library Stack/resource/outputBicep and deployment examples.
-- `sdk`: provisioning libraries declared by the Node project and installed
-  version/availability. Optional `projectDirectory` selects a project inside
-  the workspace, such as `deployment`.
-- `helpers`: composition, environment, azd, identity/access, readiness and
-  application lifecycle APIs with targeted declaration lookup.
-- `provisioning`, `commands`, `report`: the runtime's existing structured
-  capabilities, including preview and execution behavior.
-
-No Azure service catalog or planner-specific schema is required or loaded.
-
-### `iac_composer_get_reference`
-
-Read actual TypeScript declarations without importing/executing provisioning library code:
-
-```json
-{
-  "packageName": "@azure/provisioning-storage",
-  "symbol": "StorageAccount",
-  "projectDirectory": "deployment"
-}
-```
-
-`packageName` defaults to `iac-composer`, for helpers such as
-`ensureRoleAssignment`, `ProvisionOptions` or `Deployment`. Only the runtime
-and `@azure/provisioning-*` packages are accepted. Omit `symbol` for a bounded
-entrypoint excerpt; optional `file` narrows lookup to a package-relative
-declaration file. With `file` and no `symbol`, optional `line` selects the
-1-based start of a bounded excerpt for paging through longer definitions.
-
-Lookup reports the actual installed version, declaration filenames, line
-numbers, excerpts and truncation. It never downloads packages, executes
-package entrypoints, or substitutes REST/management SDK request shapes.
-Missing packages/symbols and invalid paths fail explicitly. Reads are limited
-to declaration files inside the resolved package; symlinks cannot escape it.
-Scan limits are 256 files, 2 MiB per file and 8 MiB total; at most three bounded
-excerpts and twenty file names are returned. Narrow lookup when truncated.
-These are installed provisioning library types, not a complete ARM/provider validation schema.
-
-Both tools return versioned structured content and diagnostics, with
-`isError: true` and `status: "failed"` on handled errors. Stdout is protocol-only.
-There is no code generation contract, automatic provisioning library installation, telemetry
-upload, or cloud-execution operation in this MCP server.
+Lookup reports installed versions, filenames, line numbers and excerpts.
+It does not download packages, execute provisioning-library entrypoints, or
+substitute management-SDK request shapes. Reads stay within the resolved
+package; narrow lookup when the response reports truncation. Ordinary Node
+module resolution and `.d.ts` reads are also supported; no server is needed.
 
 ## Author, validate and execute through the runtime
 
-The agent writes TypeScript provisioning source, exports rendered `outputBicep`,
-and composes it with `defineDeployment`, `deployment.provision`, returned
+The agent writes TypeScript provisioning source, passes or default-exports a
+`Stack`, and composes it with `defineDeployment`, `deployment.provision`, returned
 outputs, and explicit lifecycle helpers. Resource relationships belong in provisioning library
 references; persistent resources should not be replaced by ad hoc CLI scripts.
 
@@ -178,7 +130,7 @@ Provisioning/deployment uses the runtime's existing azd integration. A dry run
 executes trusted modules/compilers and writes local artifacts; it is not a
 sandbox, Azure what-if, permission check or deployment guarantee. Keep secrets
 out of source, logs and arguments. Deployment, role grants, authentication and
-deletion are not authorized by installing a skill or registering MCP.
+deletion are not authorized by installing a skill or reading local context.
 
 ## Optional planning/generation integrations
 
@@ -187,10 +139,10 @@ Any planning skill/tool can provide resource requirements. The separate
 integration; do not install it or convert requirements to its JSON inputs merely
 to implement resources with iac-composer.
 
-If an earlier experimental setup routed all creation requests through that
-planner, replace its routing block and primary MCP registration with these
-runtime-owned profiles. Keep its separate server only if that specific
-planner/generator is wanted. Do not delete existing consumer files blindly.
+The planner's separate MCP server remains available when that specific
+planner/generator is wanted. It is not part of this runtime. If a consumer has
+an older runtime MCP registration, remove only that reviewed server entry;
+preserve unrelated servers and project instructions.
 
 ## Verify the intended selection
 
@@ -200,7 +152,7 @@ another source, and checks for TypeScript provisioning library resource definiti
 and runtime provisioning/preview without a required recognition skill or JSON
 contract.
 
-Native skill installation, packed-runtime isolation and MCP protocol tests
+Native skill installation, packed-runtime isolation and local API tests
 verify availability and behavior, not model choice. Fresh real-host trials
 are still required to claim unprompted selection improvements; unavailable
 hosts or telemetry must be recorded as unverified, not successful.

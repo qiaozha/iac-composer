@@ -1,4 +1,4 @@
-import type { Deployment } from "./index.js";
+import type { Deployment } from "./deployment.js";
 import { getAzdProject } from "./azd.js";
 
 const builtInRoleDefinitionIds: Readonly<Record<string, string>> = {

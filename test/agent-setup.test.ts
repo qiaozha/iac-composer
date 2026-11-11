@@ -1,34 +1,19 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { parse } from "smol-toml";
 
 const setup = resolve("agent-setup");
 
-test("host profiles use their own configuration formats without global writes or auto-approval", async () => {
-  const portable = JSON.parse(await readFile(resolve(setup, "profiles/portable-mcp.json"), "utf8"));
-  const vscode = JSON.parse(await readFile(resolve(setup, "profiles/vscode-mcp.json"), "utf8"));
-  const codex = parse(await readFile(resolve(setup, "profiles/codex-config.toml"), "utf8"));
-  assert.deepEqual(Object.keys(portable), ["mcpServers"]);
-  assert.deepEqual(Object.keys(vscode), ["servers"]);
-  for (const entry of [
-    portable.mcpServers["iac-composer"],
-    vscode.servers["iac-composer"],
-  ]) {
-    assert.equal(entry.command, "node");
-    assert.equal(entry.args[1], "--workspace");
-    assert.equal(entry.args.some((arg: string) => arg.includes("@latest")), false);
-    assert.equal(Object.hasOwn(entry, "autoApprove"), false);
+test("runtime setup uses the skill and local APIs without MCP assets or dependencies", async () => {
+  const manifest = JSON.parse(await readFile("package.json", "utf8"));
+  assert.deepEqual(manifest.bin, { "iac-composer": "dist/cli.js" });
+  for (const dependencies of [manifest.dependencies, manifest.devDependencies]) {
+    assert.equal(Object.keys(dependencies).some(name => name.startsWith("@modelcontextprotocol/")), false);
   }
-  assert.equal(vscode.servers["iac-composer"].type, "stdio");
-  const servers = codex.mcp_servers;
-  assert.ok(typeof servers === "object" && servers !== null && !Array.isArray(servers) && !(servers instanceof Date));
-  const entry = servers["iac-composer"];
-  assert.ok(typeof entry === "object" && entry !== null && !Array.isArray(entry) && !(entry instanceof Date));
-  assert.equal(entry.command, "node");
-  assert.deepEqual(entry.enabled_tools, ["iac_composer_get_context", "iac_composer_get_reference"]);
-  assert.equal(Object.hasOwn(entry, "default_tools_approval_mode"), false);
+  for (const path of ["src/mcp", "dist/mcp", "agent-setup/profiles"]) {
+    await assert.rejects(access(path), { code: "ENOENT" });
+  }
 });
 
 test("the routing block is conditional, shared and not automatically installed in the producer", async () => {
@@ -45,7 +30,7 @@ test("the routing block is conditional, shared and not automatically installed i
   assert.doesNotMatch(policy, /azure-infrastructure-intent|azure_infrastructure_generate/);
   assert.equal(bridge.trim(), "@AGENTS.md");
   assert.match(instructions, /Do not replace an existing instruction file/);
-  assert.match(instructions, /Copilot CLI does \*\*not\*\* read/);
+  assert.match(instructions, /No MCP server registration/);
   assert.doesNotMatch(instructions, /gh skill install qiaozha\/iac-compose\s/);
   assert.doesNotMatch(instructions, /--scope user|--dangerously/);
 });

@@ -29,9 +29,8 @@ const topics = {
     },
     agentInterfaces: {
       skill: "iac-composer",
-      mcp: "iac-composer-mcp",
-      contextTool: "iac_composer_get_context",
-      referenceTool: "iac_composer_get_reference",
+      contextApi: "getIacComposerContext",
+      referenceApi: "getTypeScriptReference",
     },
     limitations: [
       "No intent inference, resource catalog, contract generation, automatic output wiring, or resource dependency graph in this runtime.",

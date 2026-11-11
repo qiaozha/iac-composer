@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import type { Deployment } from "./index.js";
+import type { Deployment } from "./deployment.js";
 
 export const iacComposerAzdTemplate = "iac-composer@1.0.0";
 

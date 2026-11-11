@@ -7,7 +7,7 @@ needed. Use provisioning library resource references for dependencies and runtim
 ordered provisioning, application configuration, readiness, and deployment.
 
 Use the installed provisioning library declarations rather than Azure management-SDK request
-shapes or guessed properties. `iac_composer_get_reference` can look up a
+shapes or guessed properties. The local `getTypeScriptReference` API can look up a
 provisioning type or an `iac-composer` helper without executing either package.
 Use iac-composer's APIs for provisioning and deployment; do not introduce a
 separate deployment toolchain or load backend deployment skills. Runtime-generated
@@ -38,30 +38,35 @@ preserving unrelated user changes.
    runtime is private/unpublished. A runtime registry 404 is a package-source blocker,
    not authorization to replace the selected provisioning API. Never persist an
    absolute host path such as `/opt/.../iac-composer/dist/index.js`.
-3. Inspect only the installed declarations needed. MCP is optional: without it,
-   use `import.meta.resolve("iac-composer")` from the authored project to locate
+3. Inspect only the installed declarations needed. Use
+   `import.meta.resolve("iac-composer")` from the authored project to locate
    the runtime and package exports, then targeted file/symbol searches and
    bounded `.d.ts` reads. `npm ls --depth=0` can verify declared dependencies
    once; do not repeatedly dump package inventories or complete declaration
-   files. The local CLI, typecheck and dry run work without an MCP server.
-   When MCP is already available, request only the declarations needed:
+   files. The runtime has no MCP server. If a local script needs structured
+   lookup, use the public JavaScript API:
 
-   ```json
-   {"topic":"sdk","projectDirectory":"."}
-   {"packageName":"@azure/provisioning-storage","symbol":"StorageAccount","projectDirectory":"."}
-   {"packageName":"@azure/provisioning-core","symbol":"Resource","projectDirectory":"."}
-   {"packageName":"iac-composer","symbol":"ProvisionOptions","projectDirectory":"."}
+   ```ts
+   import { getTypeScriptReference } from "iac-composer";
+
+   const reference = await getTypeScriptReference({
+     workspaceRoot: process.cwd(),
+     packageName: "@azure/provisioning-storage",
+     symbol: "StorageAccount",
+     projectDirectory: ".",
+   });
+   console.log(reference);
    ```
 
-   The first request is for `iac_composer_get_context`; the others are for
-   `iac_composer_get_reference`. `projectDirectory` selects the Node project
-   inside the registered workspace, such as `.` or `deployment`, not a global
-   tooling directory outside it. Omit it for non-inventory context topics such as
-   `start` and `authoring`. Empty inventory or `SDK_PACKAGE_UNAVAILABLE` means
+   `projectDirectory` selects the Node project inside `workspaceRoot`, such as
+   `.` or `deployment`, not a global tooling directory outside it.
+   `getIacComposerContext("sdk", { workspaceRoot, projectDirectory })` can inventory
+   installed libraries; other context topics do not accept `projectDirectory`.
+   Empty inventory or `SDK_PACKAGE_UNAVAILABLE` means
    establish the project dependencies and retry, not that a resource is
    unsupported. Do not guess service-package spellings from ARM type names.
-4. Keep skill/reference assets, the executing CLI/MCP package and provisioning library imports
-   compatible. If MCP advertises legacy standalone compilation packages while
+4. Keep skill/reference assets, the executing CLI package and provisioning library imports
+   compatible. If installed reference assets advertise legacy standalone compilation packages while
    the selected core provisioning library/reference bundles them, repair the mismatched runtime
    or package selection first. Do not mix the two API generations, install
    obsolete packages to follow stale metadata, or bypass workspace boundaries.
@@ -323,6 +328,41 @@ default-export the `Stack` itself and are loaded through
 `deployment.provision`, not passed directly to the CLI.
 A Stack export does not replace the deployment program's default export.
 Service modules export named lifecycle functions that the program awaits.
+
+## Customer workflow: define, provision, deploy
+
+1. **Define infrastructure.** Create a provisioning-library `Stack` with resources,
+   dependencies, and outputs. The [resource definition](#provisioning-resource-definitions)
+   below default-exports the stack itself; no definition wrapper is needed.
+2. **Compose the program.** Default-export `defineDeployment(async (deployment) => { ... })`.
+   The CLI creates the `Deployment` context and passes it to this callback.
+   Defining the program does not run it.
+3. **Provision resources.** Await `deployment.provision` with either the imported
+   stack or a resource entrypoint. Supply the target scope, configuration, and
+   parameter values. The runtime compiles the resources, manages generated files,
+   provisions Azure, and returns outputs. Customers do not call a separate compiler.
+4. **Deploy application code or data when needed.** Await `deployment.deploy`
+   after provisioning. Construct clients and credentials inside the action and
+   consume the returned endpoints. For Storage, create the account, container,
+   and role assignments in the resource stack; upload blob contents with the
+   JavaScript Storage client in the guarded action. See the
+   [blob upload helper](#guarded-blob-upload-example).
+5. **Preview, review, then execute.** Use the project's local script from the
+   [dependency bootstrap](#bootstrap-dependencies-before-authoring):
+
+   ```bash
+   npm run deploy -- --environment dev --dry-run --report preview.json
+   npm run deploy -- --environment dev
+   ```
+
+   Only execute the second command after explicit authorization. Preview compiles
+   selected stacks and reports their artifacts and steps without Azure provisioning
+   or guarded application/data actions. It does not validate cloud permissions.
+
+For infrastructure-only work, finish after `deployment.provision`; an application
+deployment action is optional. Do not nest provisioning inside `deployment.deploy`,
+because preview skips that callback. Keep generated files runtime-owned and use
+the report to locate them rather than invoking compilation helpers directly.
 
 ## Minimal deployment program
 
@@ -705,7 +745,7 @@ needed packages and `@azure/identity` in the authored project's manifest, select
 compatible approved versions, and install with its existing package manager.
 Inspect installed declarations and official
 [Azure JavaScript client documentation](https://learn.microsoft.com/azure/developer/javascript/sdk/overview).
-`iac_composer_get_reference` supports provisioning libraries and `iac-composer`,
+`getTypeScriptReference` supports provisioning libraries and `iac-composer`,
 not arbitrary data-plane SDKs; inspect the latter directly in the project.
 If the selected client version lacks an operation, document the exact gap
 before a bounded HTTP/CLI fallback; do not guess an API or hide access failures.
