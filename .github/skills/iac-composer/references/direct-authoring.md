@@ -86,6 +86,34 @@ Expose the real local program through the canonical project command:
 The script alone is not proof of provisioning library resource authoring. Check its provisioning
 entrypoints, imports, generated artifacts and `deployment.provision` steps.
 
+## Bounded authoring and resumption
+
+- Resolve the installed public exports and only the uncertain resource/helper
+  declarations in one bounded batch. Keep a concise contract summary; do not
+  reload package inventories or unrelated runtime implementations after every edit.
+- Batch coherent source changes and validate locally before cloud execution.
+  Include offline fixtures for request/output shapes, ARM identifier casing,
+  service-specific status/error codes and any diagnostic-output parser. Do not
+  turn a local contract defect into repeated live deployment attempts.
+- Use the CLI's `--report <path>` result for step status, diagnostics, layer
+  dependencies and artifact paths. Surface compact summaries; retain detailed
+  sanitized logs privately instead of repeatedly replaying full output. A local
+  output adapter may invoke the installed CLI, but must not replace the authored
+  `deployment.provision` / `deployment.deploy` lifecycle.
+- Keep bounded readiness and classified retry loops in guarded actions. Control
+  plane success is not data-plane readiness. Distinguish configuration propagation
+  from active repair using the scenario's deadlines; never invent service-wide
+  timeout defaults, reset an exhausted clock or broaden access to reduce retries.
+- Persist scope, identities, immutable inputs/image, relevant configuration and
+  completed-step bindings. Resume a failed owned step only while those bindings
+  still match. Positive live evidence must identify its lifecycle cycle and
+  revision/configuration; read-only acceptance resumption is not a new complete
+  canonical deployment or proof of convergence.
+- Budget model round trips as well as context size and preserve cumulative
+  accounting across in-place compaction. Cached input still counts. Use genuine
+  host telemetry with verified cache semantics; unknown usage remains unknown.
+  A post-response counter cannot enforce a strict pre-request token ceiling.
+
 ## npmjs release status
 
 Checked **2026-11-10** directly against the
