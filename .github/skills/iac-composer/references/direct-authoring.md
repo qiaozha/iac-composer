@@ -401,6 +401,13 @@ repository's environment helper when outputs must survive future runs.
 This example uses an existing authorized resource group. Add an
 `ensureResourceGroup` action only when creating the group is explicitly in scope.
 
+`ProvisionOutputs` is a string map, not a set of typed resource handles; it may
+also contain transport environment values. Validate the required output keys
+against their declared types and authorized scope before consuming them.
+Distinguish resource IDs, subscription IDs, names, and HTTPS endpoints rather
+than inferring their type from an output's suffix. Missing or invalid required
+outputs must fail explicitly.
+
 ## Provisioning resource definitions
 
 Define resources with the Azure JavaScript provisioning libraries and
@@ -556,7 +563,10 @@ preserves these definitions and the complete layer layout; application code does
 not implement compilation adapters or symbolic-reference helpers.
 Provisioning-library input names can differ from ARM property names: `enableHttpsTrafficOnly`
 renders as `supportsHttpsTrafficOnly`. Inspect installed types
-instead of suppressing mismatches with a broad cast.
+instead of suppressing mismatches with a broad cast. Typed provisioning inputs,
+rendered ARM payloads, and service-operation request bodies are distinct
+contracts. Deferred JSON sent to ARM must already use the provider's property
+names; its inner keys do not receive provisioning-library renaming.
 If a provisioning library type is temporarily incomplete, keep any type escape as
 narrow as possible around that provisioning library object.
 
@@ -618,6 +628,11 @@ the requested ARM type, API version and control shapes against authoritative
 provider documentation; generic `Resource` is not a service-specific schema
 validator. Document why the typed service class could not be used. This is
 still provisioning-library authoring, not a handwritten template fallback.
+
+Resource handles are deferred expressions, not concrete JavaScript strings.
+For dynamic property keys, construct a deferred object expression with core
+functions rather than coercing a handle into a JavaScript object key. Inspect
+the rendered result before provisioning.
 
 Only a demonstrated provisioning library/renderer limitation justifies a narrower external
 fallback, subject to the user's implementation constraints. Identify the
