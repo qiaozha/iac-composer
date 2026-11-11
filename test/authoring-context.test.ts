@@ -117,6 +117,16 @@ test("lookup returns actual installed provisioning library and runtime helper ty
   const helper = await getTypeScriptReference({ workspaceRoot: root, symbol: "ensureRoleAssignment" });
   assert.equal(helper.packageName, "iac-composer");
   assert.match(helper.matches[0]!.excerpt, /function ensureRoleAssignment/);
+  await assert.rejects(
+    getTypeScriptReference({ workspaceRoot: root, symbol: "compileProvisioning" }),
+    code("REFERENCE_SYMBOL_NOT_FOUND"),
+  );
+  await assert.rejects(
+    getTypeScriptReference({ workspaceRoot: root, symbol: "installRenderedFiles" }),
+    code("REFERENCE_SYMBOL_NOT_FOUND"),
+  );
+  const deploymentType = await getTypeScriptReference({ workspaceRoot: root, symbol: "ProvisionOptions" });
+  assert.equal(deploymentType.matches[0]!.file, "dist/deployment-types.d.ts");
   const page = await getTypeScriptReference({
     workspaceRoot: root, packageName: "@azure/provisioning-storage", file: "models/storage.d.ts", line: 5,
   });

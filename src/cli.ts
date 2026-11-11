@@ -3,10 +3,8 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  createDeployment,
-  type DeploymentProgram,
-} from "./index.js";
+import { createDeployment } from "./deployment.js";
+import type { DeploymentProgram } from "./deployment-types.js";
 import { isIacComposerAzdTemplate } from "./azd.js";
 import { importTypeScript } from "./typescript-loader.js";
 import { diagnosticFor, IacComposerError } from "./diagnostics.js";

@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { Client } from "@modelcontextprotocol/client";
-import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const execFileAsync = promisify(execFile);
 const repository = resolve(".");
@@ -20,11 +18,7 @@ test("the packed runtime implements discovery and provisioning library authoring
   const scratch = await mkdtemp(join(tmpdir(), "iac standalone "));
   const installed = join(scratch, "runtime");
   const workspace = join(scratch, "consumer");
-  let client: Client | undefined;
-  let transport: StdioClientTransport | undefined;
   t.after(async () => {
-    await client?.close();
-    await transport?.close();
     await rm(scratch, { recursive: true, force: true });
   });
   const { stdout } = await execFileAsync("npm", ["pack", "--json", "--pack-destination", scratch], {
@@ -36,7 +30,7 @@ test("the packed runtime implements discovery and provisioning library authoring
   assert.ok(typeof archive.filename === "string" && Array.isArray(archive.files));
   const paths = archive.files.map((file) => object(file).path);
   assert.ok(paths.includes("agent-setup/README.md"));
-  assert.ok(paths.includes("dist/mcp/cli.js"));
+  assert.ok(paths.every(path => typeof path === "string" && !path.startsWith("dist/mcp/")));
   assert.ok(paths.includes(".github/skills/iac-composer/SKILL.md"));
   assert.ok(paths.every((path) => typeof path === "string" && !path.includes("azure-infrastructure")));
   await mkdir(installed);
@@ -44,25 +38,20 @@ test("the packed runtime implements discovery and provisioning library authoring
   await execFileAsync("tar", ["-xzf", join(scratch, archive.filename), "--strip-components=1", "-C", installed]);
   await symlink(join(repository, "node_modules"), join(installed, "node_modules"), "dir");
   await assert.rejects(access(join(installed, "tools/azure-infrastructure")), { code: "ENOENT" });
-  transport = new StdioClientTransport({
-    command: process.execPath,
-    args: [join(installed, "dist/mcp/cli.js"), "--workspace", workspace],
-    cwd: tmpdir(), env: getDefaultEnvironment(), stderr: "pipe",
-  });
-  let stderr = "";
-  transport.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
-  client = new Client({ name: "standalone-runtime-test", version: "1.0" });
-  await client.connect(transport);
+  await mkdir(join(workspace, "node_modules"));
+  await symlink(installed, join(workspace, "node_modules/iac-composer"), "dir");
+  const query = async (source: string): Promise<Record<string, unknown>> => object(JSON.parse(
+    (await execFileAsync(process.execPath, ["--input-type=module", "--eval",
+      `import { getIacComposerContext, getTypeScriptReference } from "iac-composer";\n${source}`,
+    ], { cwd: workspace })).stdout,
+  ));
   for (const topic of ["start", "authoring", "helpers", "provisioning", "commands"]) {
-    const reply = await client.callTool({ name: "iac_composer_get_context", arguments: { topic } });
-    assert.equal(object(reply.structuredContent).status, "ready");
-    assert.doesNotMatch(JSON.stringify(reply.structuredContent), /azure-infrastructure-intent|resourcesFile|solutionFile/);
+    const reply = await query(`console.log(JSON.stringify(await getIacComposerContext(${JSON.stringify(topic)})));`);
+    assert.equal(reply.topic, topic);
+    assert.doesNotMatch(JSON.stringify(reply), /azure-infrastructure-intent|resourcesFile|solutionFile/);
   }
-  const helper = await client.callTool({
-    name: "iac_composer_get_reference", arguments: { symbol: "ensureResourceGroup" },
-  });
-  assert.equal(object(helper.structuredContent).status, "ready");
-  assert.match(JSON.stringify(helper.structuredContent), /function ensureResourceGroup/);
+  const helper = await query('console.log(JSON.stringify(await getTypeScriptReference({ workspaceRoot: process.cwd(), symbol: "ensureResourceGroup" })));');
+  assert.match(JSON.stringify(helper), /function ensureResourceGroup/);
   await t.test("a resource-only plan is authored as typed provisioning library source and previewed through the runtime", async (integration) => {
     const libraries = ["core", "storage"];
     const sdkRoot = join(repository, "examples/chatbot/node_modules/@azure");
@@ -70,7 +59,7 @@ test("the packed runtime implements discovery and provisioning library authoring
       for (const library of libraries) await access(join(sdkRoot, `provisioning-${library}`));
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-        integration.skip("Real provisioning libraries are not installed; standalone MCP isolation was still verified.");
+        integration.skip("Real provisioning libraries are not installed; standalone local API isolation was still verified.");
         return;
       }
       throw error;
@@ -79,7 +68,6 @@ test("the packed runtime implements discovery and provisioning library authoring
     for (const library of libraries) {
       await symlink(join(sdkRoot, `provisioning-${library}`), join(workspace, "node_modules/@azure", `provisioning-${library}`), "dir");
     }
-    await symlink(installed, join(workspace, "node_modules/iac-composer"), "dir");
     await symlink(join(repository, "node_modules/@types"), join(workspace, "node_modules/@types"), "dir");
     await writeFile(join(workspace, "resource-plan.txt"), "A storage account with TLS 1.2, HTTPS only, no anonymous blobs or shared-key access. No application host or compute. Requirements supplied by another planner.\n");
     await writeFile(join(workspace, "package.json"), JSON.stringify({
@@ -92,11 +80,8 @@ test("the packed runtime implements discovery and provisioning library authoring
       compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: true, types: ["node"] },
       include: ["*.ts"],
     }));
-    const sdk = await client!.callTool({
-      name: "iac_composer_get_reference", arguments: { packageName: "@azure/provisioning-storage", symbol: "StorageAccount" },
-    });
-    assert.equal(object(sdk.structuredContent).status, "ready");
-    assert.match(JSON.stringify(sdk.structuredContent), /constructor/);
+    const sdk = await query('console.log(JSON.stringify(await getTypeScriptReference({ workspaceRoot: process.cwd(), packageName: "@azure/provisioning-storage", symbol: "StorageAccount" })));');
+    assert.match(JSON.stringify(sdk), /constructor/);
     await writeFile(join(workspace, "infra.ts"), `
 import { Stack, fn } from "@azure/provisioning-core";
 import { StorageAccount } from "@azure/provisioning-storage";
@@ -131,7 +116,7 @@ export default defineDeployment(async (d) => {
     await execFileAsync(process.execPath, [
       join(installed, "dist/cli.js"), join(workspace, "deploy.ts"), "--dry-run", "--report", reportPath,
     ], { cwd: workspace, env: {
-      ...getDefaultEnvironment(), PATH: bin, AZURE_LOCATION: "westus2",
+      ...process.env, PATH: bin, AZURE_LOCATION: "westus2",
       AZURE_RESOURCE_GROUP: "rg-isolation-test", AZURE_SUBSCRIPTION_ID: "00000000-0000-0000-0000-000000000000",
     } });
     const report = JSON.parse(await readFile(reportPath, "utf8"));
@@ -147,8 +132,6 @@ export default defineDeployment(async (d) => {
     assert.equal(userFiles.includes("requirements.json") || userFiles.includes("solution.json"), false);
   });
   await unlink(join(installed, ".github/skills/iac-composer/references/direct-authoring.md"));
-  const missing = await client.callTool({ name: "iac_composer_get_context", arguments: { topic: "authoring" } });
-  assert.equal(missing.isError, true);
-  assert.match(JSON.stringify(missing.structuredContent), /CONTEXT_ASSET_UNAVAILABLE/);
-  assert.equal(stderr, "");
+  const missing = await query('try { await getIacComposerContext("authoring"); } catch (error) { console.log(JSON.stringify(error.diagnostic)); }');
+  assert.equal(missing.code, "CONTEXT_ASSET_UNAVAILABLE");
 });

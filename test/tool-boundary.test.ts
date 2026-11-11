@@ -4,15 +4,31 @@ import { resolve } from "node:path";
 import { access, readFile, readdir } from "node:fs/promises";
 import { test } from "node:test";
 import { promisify } from "node:util";
+import ts from "typescript";
 import * as runtime from "../src/index.js";
+import { createDeployment, defineDeployment, Deployment } from "../src/deployment.js";
 
 const execFileAsync = promisify(execFile);
 const cli = resolve("dist/cli.js");
+
+test("public entrypoint contains only explicit reexports from owning modules", async () => {
+  const source = ts.createSourceFile("index.ts", await readFile("src/index.ts", "utf8"), ts.ScriptTarget.Latest, true);
+  assert.ok(source.statements.length > 0);
+  for (const statement of source.statements) {
+    assert.ok(ts.isExportDeclaration(statement));
+    assert.ok(statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier));
+    assert.ok(statement.exportClause && ts.isNamedExports(statement.exportClause));
+  }
+  assert.equal(runtime.Deployment, Deployment);
+  assert.equal(runtime.createDeployment, createDeployment);
+  assert.equal(runtime.defineDeployment, defineDeployment);
+});
 
 test("exports execution primitives without planning or source generation", () => {
   assert.equal(typeof runtime.defineDeployment, "function");
   assert.equal(typeof runtime.createDeployment, "function");
   for (const name of [
+    "compileProvisioning",
     "ensureDeploymentPrincipalRoles",
     "getActiveHostedAgentVersion",
     "deployHostedAgentService",
@@ -39,6 +55,11 @@ test("exports execution primitives without planning or source generation", () =>
   ]) {
     assert.equal(Object.hasOwn(runtime, name), false, name);
   }
+});
+
+test("public declarations do not expose the internal compiler", async () => {
+  const declarations = await readFile("dist/index.d.ts", "utf8");
+  assert.doesNotMatch(declarations, /\bcompileProvisioning\b/);
 });
 
 test("runtime source and declarations contain no resource contracts or contract adapters", async () => {

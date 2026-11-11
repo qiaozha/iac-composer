@@ -12,7 +12,7 @@ Use fresh sessions and clean copies of the same application fixture:
 
 - **Baseline:** the prior runtime execution-only discovery.
 - **Treatment:** the standalone TypeScript/provisioning-library implementation
-  skill and root-owned MCP setup, without installing a particular planner.
+  skill and local runtime setup, without installing a particular planner.
 
 Keep host/model versions, instructions unrelated to this experiment,
 dependencies and budgets fixed. Leave other normal Azure skills/tools enabled;
@@ -31,7 +31,7 @@ test implementation compliance, not spontaneous selection rate.
    Record host diagnostics, loaded instruction paths and the tool catalog.
 2. **Selection:** did the agent choose TypeScript provisioning-library resource
    authoring and iac-composer helpers/runtime, invoke the runtime skill, read its
-   canonical reference, or call its MCP tools without an implementation hint?
+   canonical reference, or use its local APIs without an implementation hint?
 3. **Handoff:** did it preserve explicit tools/existing IaC, skip repeated
    architecture selection for complete plans, accept requirements from any
    source, and proceed without a mandatory planner/generator contract?
@@ -44,7 +44,7 @@ location/event IDs in `evidence` without copying secrets. Do not count provision
 protocol tests as model-selection trials.
 
 For a selected iac-composer implementation, inspect both halves: provisioning library resource
-constructs in an authored Stack that renders non-empty `outputBicep`, and a
+constructs in an authored Stack that produces non-empty infrastructure artifacts, and a
 program that calls `deployment.provision` and consumes its outputs. A public
 package import, CLI invocation or `defineDeployment`/`deployment.deploy`
 wrapper around handwritten Bicep and direct `az deployment` calls does not
@@ -54,7 +54,7 @@ resource artifacts/provision steps, not merely a skipped callback.
 The explicit bootstrap case starts with no project provisioning library dependencies despite an
 available CLI. Check manifest/lockfile repair, project-local public imports and
 workspace-scoped declarations. Registry/access errors or conflicting
-CLI/MCP/skill references must be reported or repaired, not relabeled as an
+CLI/skill references must be reported or repaired, not relabeled as an
 unsupported-resource exception. For a missing service provisioning library, check public core
 `Resource` before a bounded, explained external fallback. These fixture checks
 are not evidence that a live model will follow the revised guidance.

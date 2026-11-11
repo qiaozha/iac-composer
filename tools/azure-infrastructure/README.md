@@ -172,8 +172,9 @@ readiness. See [the optional MCP integration](docs/mcp.md) for registration and
 its distinction from the runtime-owned implementation tools.
 
 `getAzureInfrastructureContext(topic)` provides the same context to programmatic
-callers of this optional integration. The independent runtime owns its own
-`iac-composer-mcp` server; it does not depend on these planner/generator tools.
+callers of this optional integration. The independent runtime uses its skill,
+local JavaScript APIs and CLI; it does not ship an MCP server or depend on
+these planner/generator tools.
 Programmatic `generateDeploymentCode` callers can opt into the same
 workspace/ownership preflight with `workspaceRoot`; existing CLI defaults remain
 unchanged. Progress callbacks now identify each phase before its work, so

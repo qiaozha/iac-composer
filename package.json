@@ -4,8 +4,7 @@
   "description": "Define Azure infrastructure in TypeScript with provisioning libraries and compose provisioning and application deployment in authored order.",
   "type": "module",
   "bin": {
-    "iac-composer": "dist/cli.js",
-    "iac-composer-mcp": "dist/mcp/cli.js"
+    "iac-composer": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -26,17 +25,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.4.0",
     "tsx": "^4.21.0",
-    "yaml": "^2.9.1",
-    "zod": "4.6.7"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@azure/provisioning-core": "1.0.0-beta.2",
-    "@modelcontextprotocol/client": "2.4.0",
-    "ajv": "8.17.1",
     "@types/node": "^24.0.0",
-    "smol-toml": "1.9.1",
+    "ajv": "8.17.1",
     "typescript": "^6.0.0"
   },
   "peerDependencies": {

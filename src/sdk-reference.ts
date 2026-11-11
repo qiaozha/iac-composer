@@ -187,6 +187,18 @@ export async function getTypeScriptReference(options: {
   }
   const project = await projectPath(options.workspaceRoot, options.projectDirectory ?? ".");
   const installed = await installedPackage(packageName, project);
+  if (packageName === "iac-composer" && options.symbol) {
+    // Internal modules ship declarations too; only entrypoint names are public.
+    const entrypoint = await readFile(installed.entrypoint, "utf8");
+    const publicNames = new Set(
+      [...entrypoint.matchAll(/export\s+(?:type\s+)?\{([^}]+)\}\s+from\s+["'][^"']+["']/g)]
+        .flatMap((match) => match[1]!.split(","))
+        .map((name) => name.trim().replace(/^type\s+/, "").split(/\s+as\s+/).at(-1)?.trim()),
+    );
+    if (!publicNames.has(options.symbol)) {
+      throw referenceError("REFERENCE_SYMBOL_NOT_FOUND", options.symbol, "Query a name exported by iac-composer's public entrypoint.");
+    }
+  }
   const files: string[] = [];
   let truncated = false;
   if (options.file) {

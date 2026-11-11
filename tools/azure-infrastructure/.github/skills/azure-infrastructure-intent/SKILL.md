@@ -23,7 +23,7 @@ An existing complete plan skips service selection. Direct resource authoring
 and existing deployment programs go to `iac-composer`, without converting the
 plan into this generator's input format unless generation is requested. This
 optional tool's MCP entry point is `azure_infrastructure_get_context`; the
-independent implementation entry point is `iac_composer_get_context`.
+independent implementation entry point is the `iac-composer` skill and runtime CLI.
 
 ## Desired outcome
 

@@ -9,7 +9,6 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { Stack } from "@azure/provisioning-core";
 
 import {
-  compileProvisioning,
   createDeployment,
   IacComposerError,
   requiredEnv,
@@ -267,10 +266,20 @@ test("artifact preflight preserves previous files on invalid outputs and allows 
   assert.deepEqual(await deployment.provision("app", { entrypoint: repaired, outputDirectory: output }), {});
 });
 
-test("standalone compilation preserves its optional-parameter-file behavior", async (t) => {
+test("provisioning supports explicitly selected template and parameter filenames", async (t) => {
   const root = await fixture(t);
   const infra = join(root, "infra.ts");
-  await writeFile(infra, 'export const outputBicep = [{ path: "..notes.bicep", contents: "valid relative name" }];');
-  await compileProvisioning(infra, join(root, "compiled"));
+  await writeFile(infra, `export const outputBicep = [
+    { path: "..notes.bicep", contents: "valid relative name" },
+    { path: "settings.bicepparam", contents: "using './..notes.bicep'\\n" }
+  ];`);
+  const deployment = createDeployment({ projectDirectory: root, dryRun: true, log: () => {} });
+  await deployment.provision("custom files", {
+    entrypoint: infra,
+    outputDirectory: join(root, "compiled"),
+    templateFile: "..notes.bicep",
+    parametersFile: "settings.bicepparam",
+  });
   assert.equal(await readFile(join(root, "compiled/..notes.bicep"), "utf8"), "valid relative name");
+  assert.equal(await readFile(join(root, "compiled/settings.bicepparam"), "utf8"), "using './..notes.bicep'\n");
 });

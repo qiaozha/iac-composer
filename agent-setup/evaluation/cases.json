@@ -27,7 +27,7 @@
     {
       "id": "generic-api",
       "prompt": "Create Azure infrastructure for this API with durable document storage.",
-      "fixture": "Existing API and Azure resource requirements supplied by another planning skill; only the runtime skill/MCP is installed.",
+      "fixture": "Existing API and Azure resource requirements supplied by another planning skill; only the runtime and its skill are installed.",
       "expectedRoute": "typescript-implementation",
       "mayGenerate": true
     },

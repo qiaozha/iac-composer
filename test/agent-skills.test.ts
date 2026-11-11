@@ -47,6 +47,8 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   assert.match(skill, /fn\.json\("0\.25"\)/);
   assert.match(skill, /Default-export the `Stack` itself/);
   assert.match(skill, /deployment\.provision\(name, \{ stack, \.\.\. \}\)/);
+  assert.match(skill, /references\/direct-authoring\.md#customer-workflow-define-provision-deploy/);
+  assert.match(skill, /Compilation and generated-file layout are runtime internals/);
   assert.match(skill, /Use `createParameterVariables` and `createGraphResource`/);
   assert.match(skill, /references\/direct-authoring\.md#connect-resources-with-role-assignments/);
   assert.match(skill, /Runtime-managed files inside `\.generated` do not select a separate deployment\s+workflow/);
@@ -65,6 +67,37 @@ test("the implementation skill advertises provisioning TypeScript without a plan
   }
   assert.doesNotMatch(String(runtime.description), /azure-infrastructure-intent|already exists/);
   assert.equal(typeof describeRuntimeCapabilities("overview"), "object");
+});
+
+test("API contract reference distinguishes installed interfaces and observed request-shape failures", async () => {
+  await validateSkill(resolve(root, skillSources[0]));
+  const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
+  assert.match(skill, /references\/api-contracts\.md/);
+  const reference = await readFile(resolve(root, skillSources[0], "references/api-contracts.md"), "utf8");
+  assert.match(reference, /current resource entrypoint default-exports a `Stack`/);
+  assert.match(reference, /older archived runtime exposing `defineProvisioning`/);
+  assert.match(reference, /Await `deployment\.provision`/);
+  assert.match(reference, /`deployment\.deploy` actions/);
+  assert.match(reference, /uploading blob contents is a data-plane deployment action/);
+  assert.match(reference, /npm run deploy -- --environment dev --dry-run --report preview\.json/);
+  assert.match(reference, /Compilation is internal to provisioning/);
+  assert.doesNotMatch(reference, /compileProvisioning|requiredFiles/);
+  assert.match(reference, /`_ID` suffix does not make a subscription GUID an ARM/);
+  assert.match(reference, /`iPAddressOrRange`, `action`/);
+  assert.match(reference, /already be ARM-shaped/);
+  assert.match(reference, /String\(identity\.id\)/);
+  const json = /```json\n([\s\S]*?)\n```/.exec(reference);
+  assert.ok(json);
+  assert.deepEqual(JSON.parse(json[1]!), { name: "candidate-search-name", type: "searchServices" });
+  assert.match(reference, /choose `subscription` \*\*or\*\* `tenantId`, not both/);
+  assert.match(reference, /new AzureCliCredential\(\{ subscription \}\)/);
+  assert.match(reference, /configure `auth\.useAzCliAuth=true`/);
+  assert.match(reference, /run-private `AZD_CONFIG_DIR`/);
+  assert.match(reference, /implementation-specific transport detail, not a prerequisite for other methods/);
+  assert.match(reference, /docker buildx version/);
+  assert.match(reference, /docker manifest inspect --verbose/);
+  assert.match(reference, /supported stdin\/PTY session/);
+  assert.match(reference, /successful CLI connection\/exit is not proof/);
 });
 
 test("documented data-plane SDK operations are guarded, use returned endpoints, and propagate errors", async (t) => {
@@ -433,7 +466,7 @@ export default stack;
   await assert.rejects(access(marker), { code: "ENOENT" });
 });
 
-test("actual runtime package owns its skill, MCP and consumer setup without a planner package", async () => {
+test("actual runtime package owns its skill and local consumer setup without MCP or a planner package", async () => {
   const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json"], { cwd: root });
   const packed: unknown = JSON.parse(stdout);
   assert.ok(Array.isArray(packed) && packed.length === 1);
@@ -442,12 +475,14 @@ test("actual runtime package owns its skill, MCP and consumer setup without a pl
   const paths = files.map((entry) => object(entry).path);
   assert.ok(paths.includes(".github/skills/iac-composer/SKILL.md"));
   assert.ok(paths.includes(".github/skills/iac-composer/references/direct-authoring.md"));
+  assert.ok(paths.includes(".github/skills/iac-composer/references/api-contracts.md"));
   assert.ok(paths.includes("dist/discovery.js"));
-  assert.ok(paths.includes("dist/mcp/cli.js"));
+  assert.ok(paths.every(path => typeof path === "string" &&
+    !path.startsWith("dist/mcp/") && !path.startsWith("agent-setup/profiles/")));
   assert.ok(paths.includes("agent-setup/AGENTS.md.template"));
   const manifest = object(JSON.parse(await readFile(join(root, "package.json"), "utf8")));
   assert.equal(Object.hasOwn(object(manifest.dependencies), "azure-infrastructure"), false);
-  assert.equal(object(manifest.bin)["iac-composer-mcp"], "dist/mcp/cli.js");
+  assert.deepEqual(manifest.bin, { "iac-composer": "dist/cli.js" });
 });
 
 test("the canonical implementation skill installs alone in a consumer workspace", async (t) => {
