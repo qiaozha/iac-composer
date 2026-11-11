@@ -87,6 +87,23 @@ test("shared guidance keeps reusable authoring rules without a consumer-specific
   ]);
 });
 
+test("bounded authoring guidance reduces replay without embedding scenario controls", async () => {
+  await validateSkill(resolve(root, skillSources[0]));
+  const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
+  const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");
+  assert.match(skill, /references\/direct-authoring\.md#bounded-authoring-and-resumption/);
+  const guidance = reference.split("## Bounded authoring and resumption\n")[1]?.split("## npmjs release status\n")[0];
+  assert.ok(guidance);
+  for (const pattern of [/one bounded batch/,/offline fixtures/,/--report <path>/,
+    /compact summaries/,/Control\s+plane success is not data-plane readiness/,
+    /scenario's deadlines/,/lifecycle cycle/,/not a new complete/,
+    /model round trips as well as context size/,/post-response counter cannot enforce/]) {
+    assert.match(guidance, pattern);
+  }
+  assert.doesNotMatch(guidance, /chatbot|Search firewall|1200000|LegacyRegistryPermissions|PublicAccessNotPermitted|deployment:usage|\/home\/qiaozha/);
+  assert.ok(skill.split("\n").length < 500);
+});
+
 test("documented data-plane SDK operations are guarded, use returned endpoints, and propagate errors", async (t) => {
   const skill = await readFile(resolve(root, skillSources[0], "SKILL.md"), "utf8");
   const reference = await readFile(resolve(root, skillSources[0], "references/direct-authoring.md"), "utf8");

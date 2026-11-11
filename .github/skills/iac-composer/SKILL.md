@@ -5,7 +5,7 @@ license: MIT
 compatibility: Provisioning-library authoring requires Node.js 22 or newer; the runtime alone supports Node.js 20.6 or newer. Use the installed iac-composer APIs and project commands for provisioning and deployment. Cloud execution requires authenticated Azure access.
 metadata:
   author: qiaozha
-  version: "2.14"
+  version: "2.15"
 ---
 
 # Define infrastructure with iac-composer
@@ -50,6 +50,10 @@ shipped or required by this runtime.
 Read this skill once, then only the reference section or symbol needed for a
 specific unresolved question. Reuse compatible authored source and dependency
 choices; do not repeat broad inventories or dump entire declarations/templates.
+Batch uncertain API lookups before authoring, keep execution output compact, and
+resume verified owned steps rather than replaying unchanged work. Follow
+[bounded authoring and resumption](./references/direct-authoring.md#bounded-authoring-and-resumption)
+without weakening scenario-specific acceptance or budgets.
 
 ## Guardrails
 
